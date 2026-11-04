@@ -13,6 +13,7 @@
     });
     C.on('time', C.throttle(() => { if (C.selection.size === 1) refresh(); }, 90));
     C.on('fadeLive', refresh);
+    C.on('voiceReady', C.debounce(() => { if (tab === 'audio') I.render(true); }, 150));
     C.on('inspectTab', (t) => { if (t) tab = t; I.render(true); });
     C.on('focusText', () => { tab = 'text'; I.render(true); setTimeout(() => { const ta = root.querySelector('textarea'); if (ta) { ta.focus(); ta.select(); } }, 30); });
     C.on('collab', () => { if (!C.selection.size) I.render(true); });
@@ -137,6 +138,7 @@
   const secs = { fmt: (v) => v.toFixed(2), unit: 's', parse: (s) => parseFloat(s) };
 
   // ---------- render ----------
+  I.isTab = (t) => tab === t && C.selection.size === 1;
   I.render = (force) => {
     const k = computeKey();
     if (!force && k === key && root.childElementCount) { refresh(); return; }
@@ -148,18 +150,19 @@
     if (sel.length > 1) return renderMulti(sel);
     const c = sel[0];
     const tabs = {
-      video: [['video', 'Video'], ['color', 'Color'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['audio', 'Audio'], ['speed', 'Speed'], ['transition', 'Transition']],
-      image: [['video', 'Image'], ['color', 'Color'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
-      text: [['text', 'Text'], ['video', 'Transform'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
+      video: [['video', 'Video'], ['color', 'Color'], ['mask', 'Mask'], ['style', 'Style'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['audio', 'Audio'], ['speed', 'Speed'], ['transition', 'Transition']],
+      image: [['video', 'Image'], ['color', 'Color'], ['mask', 'Mask'], ['style', 'Style'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
+      text: [['text', 'Text'], ['video', 'Transform'], ['style', 'Style'], ['mask', 'Mask'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
+      shape: [['shape', 'Shape'], ['video', 'Transform'], ['style', 'Style'], ['mask', 'Mask'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
       audio: [['audio', 'Audio'], ['motion', 'Keyframes'], ['speed', 'Speed']],
-      color: [['video', 'Color'], ['adjust', 'Adjust'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
+      color: [['video', 'Color'], ['adjust', 'Adjust'], ['mask', 'Mask'], ['style', 'Style'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
       effect: [['effects', 'Effects'], ['color', 'Color grade'], ['motion', 'Keyframes'], ['video', 'Layer']],
     }[c.kind];
     if (c.kind !== 'audio' && c.kind !== 'effect') tabs.splice(1, 0, ['effects', 'Effects']);
     if (c.kind === 'video' && !C.hasAudio(c)) tabs.splice(tabs.findIndex((t) => t[0] === 'audio'), 1);
     if (!tab || !tabs.some((t) => t[0] === tab)) tab = tabs[0][0];
     curClip = c;
-    const dot = { video: 'var(--clip-video)', image: 'var(--clip-image)', audio: 'var(--clip-audio)', text: 'var(--clip-text)', color: 'var(--clip-color)', effect: 'var(--clip-effect)' }[c.kind];
+    const dot = { video: 'var(--clip-video)', image: 'var(--clip-image)', audio: 'var(--clip-audio)', text: 'var(--clip-text)', color: 'var(--clip-color)', effect: 'var(--clip-effect)', shape: 'var(--clip-shape)' }[c.kind];
     const head = C.h(`<div class="insp-head"><div class="insp-title"><span class="dot" style="background:${dot}"></span><b>${C.esc(c.kind === 'text' ? (c.sticker ? 'Sticker' : 'Text') : c.name)}</b><small>${C.fmtDur(c.duration)}</small></div>
       <div class="kf-bar"><span class="muted">${C.icon('diamond')}<span class="kf-count"></span></span><button class="icon-btn" data-k="prev" data-tip="Previous keyframe">${C.icon('prevFrame')}</button><button class="icon-btn" data-k="next" data-tip="Next keyframe">${C.icon('nextFrame')}</button><button class="reset-btn" data-k="clear">Clear all</button></div>
       <div class="tabs"></div></div>`);
@@ -173,8 +176,9 @@
     tabs.forEach(([id, l]) => { const b = C.h(`<button class="tab ${id === tab ? 'active' : ''}">${l}</button>`); b.onclick = () => { tab = id; I.render(true); }; tb.appendChild(b); });
     root.appendChild(head);
     const body = C.h('<div class="insp-body"></div>'); root.appendChild(body);
-    ({ video: tabTransform, adjust: tabAdjust, color: tabColor, motion: tabMotion, anim: tabAnim, audio: tabAudio, speed: tabSpeed, transition: tabTransition, text: tabText, effects: tabEffects })[tab](body, c);
+    ({ video: tabTransform, adjust: tabAdjust, color: tabColor, motion: tabMotion, anim: tabAnim, audio: tabAudio, speed: tabSpeed, transition: tabTransition, text: tabText, effects: tabEffects, mask: tabMask, style: tabStyle, shape: tabShape })[tab](body, c);
     if (sameSel) root.scrollTop = prevScroll;
+    C.emit('inspectorRendered');
   };
 
   function timing(body, c) {
@@ -204,6 +208,25 @@
     select(s, 'Blend mode', C.BLENDS, () => c.blend || 'source-over', (v) => { c.blend = v; });
     if (c.kind === 'video' || c.kind === 'image') seg(s, 'Fit', [['contain', 'Fit'], ['cover', 'Fill'], ['stretch', 'Stretch']], () => c.t.fit, (v) => { c.t.fit = v; });
     toggles(s, 'Flip', [['Flip horizontal', 'flipH', () => c.t.flipH, (v) => { c.t.flipH = v; }], ['Flip vertical', 'flipV', () => c.t.flipV, (v) => { c.t.flipV = v; }]]);
+    const t3 = section(body, '3D', () => { for (const k of ['rx', 'ry', 'z', 'persp']) { delete c.t[k]; if (c.kf) delete c.kf['t.' + k]; } });
+    prop(t3, c, 't.rx', 'Tilt (X)', { min: -180, max: 180, step: 0.5, unit: '°', def: 0 });
+    prop(t3, c, 't.ry', 'Turn (Y)', { min: -180, max: 180, step: 0.5, unit: '°', def: 0 });
+    prop(t3, c, 't.z', 'Depth', { min: -80, max: 200, step: 0.5, def: 0 });
+    prop(t3, c, 't.persp', 'Perspective', { min: 0.2, max: 4, step: 0.01, def: 1, fmt: (v) => (+v).toFixed(2) });
+    const q3 = C.h('<div class="chips" style="margin-top:6px"></div>');
+    [['Tilt back', { rx: 35 }], ['Lean left', { ry: 35 }], ['Lean right', { ry: -35 }], ['Floor', { rx: 60, z: 10 }], ['Flip', { ry: 180 }]].forEach(([l, v]) => { const b = C.h(`<button class="chip">${l}</button>`); b.onclick = () => { C.begin(); Object.assign(c.t, v); commit('3D preset'); refresh(); }; q3.appendChild(b); });
+    t3.appendChild(q3);
+    t3.appendChild(C.h('<p class="hint">Animate with ◆ for 3D flips, spins and camera moves. 3D transitions (cube, card flip…) are in Transitions.</p>'));
+    const wp = section(body, 'Warp & wrap');
+    select(wp, 'Style', C.geo.WARPS, () => (c.warp && c.warp.mode) || 'none', (v) => { if (v === 'none') c.warp = null; else c.warp = Object.assign({ amount: 50, speed: 1, freq: 2, spin: 0.6 }, c.warp || {}, { mode: v }); setTimeout(() => I.render(true), 0); });
+    if (c.warp && c.warp.mode && c.warp.mode !== 'none') {
+      const m = c.warp.mode;
+      if (m !== 'pin') prop(wp, c, 'warp.amount', 'Amount', { min: -100, max: 100, step: 1, def: 50 });
+      if (m === 'wave' || m === 'flag') { prop(wp, c, 'warp.freq', 'Waves', { min: 0.5, max: 8, step: 0.1, def: 2, fmt: (v) => (+v).toFixed(1) }); prop(wp, c, 'warp.speed', 'Speed', { min: 0, max: 6, step: 0.05, def: 1, fmt: (v) => (+v).toFixed(2) }); }
+      if (m === 'wrap' || m === 'sphere') prop(wp, c, 'warp.spin', 'Spin', { min: -3, max: 3, step: 0.05, def: 0.6, fmt: (v) => (+v).toFixed(2) });
+      if (m === 'twist') prop(wp, c, 'warp.speed', 'Animate', { min: 0, max: 6, step: 0.05, def: 0, fmt: (v) => (+v).toFixed(2) });
+      if (m === 'pin') for (const [k, l] of [['tlx', 'Top-left X'], ['tly', 'Top-left Y'], ['trx', 'Top-right X'], ['try', 'Top-right Y'], ['blx', 'Bottom-left X'], ['bly', 'Bottom-left Y'], ['brx', 'Bottom-right X'], ['bry', 'Bottom-right Y']]) prop(wp, c, 'warp.' + k, l, { min: -60, max: 60, step: 0.5, def: 0 });
+    }
     const al = section(body, 'Align');
     const chips = C.h('<div class="chips"></div>');
     [['Left', 'x', null, 'l'], ['Center H', 'x', 0.5], ['Right', 'x', null, 'r'], ['Top', 'y', null, 't'], ['Middle', 'y', 0.5], ['Bottom', 'y', null, 'b']].forEach(([l, ax, v, edge]) => {
@@ -241,6 +264,95 @@
       chips.appendChild(b);
     });
     s3.appendChild(chips);
+  }
+
+  // ---------- masks ----------
+  function tabMask(body, c) {
+    const add = section(body, 'Add a mask');
+    const grid = C.h('<div class="mask-types"></div>');
+    C.MASK_TYPES.forEach(([t, l]) => {
+      const b = C.h(`<button class="mask-type" title="${l}"><span class="mt-ico mt-${t}"></span><small>${l}</small></button>`);
+      b.onclick = () => { if (t === 'path') { C.penMask.start(c); return; } C.begin(); c.masks = c.masks || []; const m = { id: C.uid('m_'), type: t, x: 0, y: 0, w: t === 'mirror' ? 1 : 0.55, h: t === 'mirror' ? 0.35 : 0.55, rot: 0, feather: t === 'linear' || t === 'mirror' ? 15 : 8, round: t === 'rect' ? 0 : 0, invert: false, mode: 'add', on: true }; c.masks.push(m); C.UI.focusMask = { clip: c.id, mask: m.id }; commit('Add mask'); I.render(true); C.preview.update(); };
+      grid.appendChild(b);
+    });
+    add.appendChild(grid);
+    add.appendChild(C.h('<p class="hint" style="margin-top:8px">Masks hide parts of the clip. Drag the pink outline on the player to move, resize and rotate. Every setting can be keyframed (◆) to animate reveals.</p>'));
+    (c.masks || []).forEach((m, i) => {
+      const card = C.h(`<div class="fx-card ${C.UI.focusMask && C.UI.focusMask.mask === m.id ? 'focused' : ''} ${m.on === false ? 'off' : ''}"><div class="fx-head"><label class="switch"><input type="checkbox" ${m.on !== false ? 'checked' : ''}><span></span></label><b>Mask ${i + 1} · ${(C.MASK_TYPES.find((x) => x[0] === m.type) || ['', m.type])[1]}</b><span style="flex:1"></span><button class="icon-btn" data-a="edit" data-tip="Edit on canvas">${C.icon('fit')}</button><button class="icon-btn" data-a="del" data-tip="Delete mask">${C.icon('x')}</button></div><div class="fx-body"></div></div>`);
+      card.querySelector('input').onchange = (e) => { C.begin(); m.on = e.target.checked; commit('Toggle mask'); };
+      card.querySelector('[data-a=del]').onclick = () => { C.begin(); c.masks.splice(c.masks.indexOf(m), 1); for (const k of Object.keys(c.kf || {})) if (k.startsWith(`m.${m.id}.`)) delete c.kf[k]; commit('Delete mask'); I.render(true); C.preview.update(); };
+      card.querySelector('[data-a=edit]').onclick = () => { C.UI.focusMask = { clip: c.id, mask: m.id }; if (C.UI.playhead < c.start || C.UI.playhead >= C.clipEnd(c)) C.engine.seek(c.start + Math.min(0.5, c.duration / 2)); I.render(true); C.preview.update(); };
+      const b = card.querySelector('.fx-body'); const pp = `m.${m.id}.`;
+      seg(b, 'Mode', [['add', 'Add'], ['subtract', 'Subtract'], ['intersect', 'Intersect']], () => m.mode || 'add', (v) => { m.mode = v; });
+      prop(b, c, pp + 'x', 'Position X', { min: -1, max: 1, step: 0.001, def: 0, fmt: (v) => (+v).toFixed(3) });
+      prop(b, c, pp + 'y', 'Position Y', { min: -1, max: 1, step: 0.001, def: 0, fmt: (v) => (+v).toFixed(3) });
+      if (m.type === 'path') { b.appendChild(C.h('<p class="hint" style="margin:4px 0">Drag points and handles on the player · Alt+click a point for corner/smooth · double-click to delete a point.</p>')); prop(b, c, pp + 'w', 'Scale X', { min: 0.05, max: 3, step: 0.01, ...pct, def: 1 }); prop(b, c, pp + 'h', 'Scale Y', { min: 0.05, max: 3, step: 0.01, ...pct, def: 1 }); }
+      else if (m.type !== 'linear') { if (m.type !== 'mirror') prop(b, c, pp + 'w', 'Width', { min: 0.01, max: 2, step: 0.001, ...pct, def: 0.55 }); prop(b, c, pp + 'h', m.type === 'mirror' ? 'Band size' : 'Height', { min: 0.01, max: 2, step: 0.001, ...pct, def: 0.55 }); }
+      prop(b, c, pp + 'rot', 'Rotation', { min: -180, max: 180, step: 0.5, unit: '°', def: 0 });
+      prop(b, c, pp + 'feather', 'Feather', { min: 0, max: 100, step: 1, def: 8 });
+      if (m.type === 'rect' || m.type === 'triangle' || m.type === 'star') prop(b, c, pp + 'round', 'Round corners', { min: 0, max: 100, step: 1, def: 0 });
+      sw(b, 'Invert', () => m.invert, (v) => { m.invert = v; });
+      card.addEventListener('pointerdown', (e) => { if (e.target.closest('button, input, select')) return; if (!C.UI.focusMask || C.UI.focusMask.mask !== m.id) { C.UI.focusMask = { clip: c.id, mask: m.id }; C.$$('.fx-card', root).forEach((x) => x.classList.remove('focused')); card.classList.add('focused'); C.preview.update(); } });
+      body.appendChild(card);
+    });
+  }
+
+  // ---------- layer styles (glow, shadow, stroke, bevel…) ----------
+  function tabStyle(body, c) {
+    const PS = C.photo.STYLE_DEFAULTS, NAMES = C.photo.STYLE_NAMES;
+    const ensure = (k) => { c.styles = c.styles || {}; if (!c.styles[k]) c.styles[k] = Object.assign({}, PS[k], { on: false }); return c.styles[k]; };
+    const quick = section(body, 'Quick styles');
+    const qs = C.h('<div class="chips"></div>');
+    [['Glow', { outerGlow: { on: true, color: '#19d3c5', size: 30, spread: 25, opacity: 90 } }], ['Drop shadow', { dropShadow: { on: true, distance: 14, size: 22, opacity: 70 } }], ['Outline', { stroke: { on: true, size: 8, color: '#ffffff' } }], ['Sticker', { stroke: { on: true, size: 14, color: '#ffffff' }, dropShadow: { on: true, distance: 8, size: 14, opacity: 50 } }], ['Neon', { stroke: { on: true, size: 4, color: '#ff4fd8' }, outerGlow: { on: true, color: '#ff4fd8', size: 40, spread: 30, opacity: 100 } }], ['Embossed', { bevel: { on: true, size: 12 }, dropShadow: { on: true, distance: 6, size: 10, opacity: 50 } }], ['Gold', { gradientOverlay: { on: true, c1: '#fff1a8', c2: '#b8860b', angle: 90 }, bevel: { on: true, size: 8 }, stroke: { on: true, size: 3, color: '#5a3d00' } }], ['None', null]].forEach(([l, v]) => {
+      const b = C.h(`<button class="chip">${l}</button>`);
+      b.onclick = () => { C.begin(); if (!v) c.styles = {}; else for (const k in v) Object.assign(ensure(k), v[k]); commit('Style: ' + l); I.render(true); };
+      qs.appendChild(b);
+    });
+    quick.appendChild(qs);
+    for (const k of Object.keys(PS)) {
+      const st = (c.styles && c.styles[k]) || Object.assign({}, PS[k], { on: false });
+      const sec = C.h(`<div class="section"><div class="section-title"><span>${NAMES[k]}</span><label class="switch"><input type="checkbox" ${st.on ? 'checked' : ''}><span></span></label></div><div class="st-body" style="${st.on ? '' : 'display:none'}"></div></div>`);
+      sec.querySelector('input').onchange = (e) => { C.begin(); ensure(k).on = e.target.checked; commit(NAMES[k]); I.render(true); };
+      const b = sec.querySelector('.st-body');
+      if (st.on) {
+        const S = () => ensure(k);
+        const sl = (lbl, key, mn, mx) => slider(b, lbl, () => S()[key], (v) => { S()[key] = v; }, { min: mn, max: mx, step: 1, def: PS[k][key] });
+        const col = (lbl, key) => color(b, lbl, () => S()[key], (v) => { S()[key] = v; });
+        const sel = (lbl, key, opts) => select(b, lbl, opts, () => S()[key], (v) => { S()[key] = v; });
+        if (k === 'dropShadow') { col('Color', 'color'); sl('Opacity', 'opacity', 0, 100); sl('Angle', 'angle', -180, 180); sl('Distance', 'distance', 0, 200); sl('Softness', 'size', 0, 150); }
+        if (k === 'innerShadow') { col('Color', 'color'); sl('Opacity', 'opacity', 0, 100); sl('Angle', 'angle', -180, 180); sl('Distance', 'distance', 0, 100); sl('Softness', 'size', 0, 100); }
+        if (k === 'outerGlow') { col('Color', 'color'); sl('Opacity', 'opacity', 0, 100); sl('Size', 'size', 0, 150); sl('Spread', 'spread', 0, 100); }
+        if (k === 'innerGlow') { col('Color', 'color'); sl('Opacity', 'opacity', 0, 100); sl('Size', 'size', 0, 100); }
+        if (k === 'bevel') { sl('Size', 'size', 1, 60); sl('Depth', 'depth', 1, 300); sl('Light angle', 'angle', -180, 180); col('Highlight', 'highlight'); col('Shadow', 'shadow'); }
+        if (k === 'stroke') { sl('Size', 'size', 1, 60); sel('Position', 'position', [['outside', 'Outside'], ['inside', 'Inside'], ['center', 'Center']]); col('Color', 'color'); sl('Opacity', 'opacity', 0, 100); }
+        if (k === 'colorOverlay') { col('Color', 'color'); sl('Opacity', 'opacity', 0, 100); sel('Blend', 'blend', C.BLENDS); }
+        if (k === 'gradientOverlay') { col('From', 'c1'); col('To', 'c2'); sl('Angle', 'angle', -180, 180); sel('Style', 'style', [['linear', 'Linear'], ['radial', 'Radial']]); sl('Opacity', 'opacity', 0, 100); }
+      }
+      body.appendChild(sec);
+    }
+    body.appendChild(C.h('<p class="hint">Styles follow the clip’s shape — great on text, stickers, PNGs, green-screened video and shapes.</p>'));
+  }
+
+  // ---------- shape clips ----------
+  function tabShape(body, c) {
+    const sh = c.shape;
+    const s = section(body, 'Shape');
+    select(s, 'Type', C.geo.SHAPES, () => sh.kind, (v) => { sh.kind = v; setTimeout(() => I.render(true), 0); });
+    prop(s, c, 'shape.w', 'Width', { min: 4, max: 2400, step: 1, def: 500, unit: 'px' });
+    prop(s, c, 'shape.h', 'Height', { min: 0, max: 2400, step: 1, def: 500, unit: 'px' });
+    prop(s, c, 'shape.radius', 'Round corners', { min: 0, max: 100, step: 1, def: 0 });
+    if (['star', 'polygon'].includes(sh.kind)) prop(s, c, 'shape.points', 'Points', { min: 3, max: 24, step: 1, def: 5, clamp: (v) => Math.round(v) });
+    if (['star', 'ring', 'cross'].includes(sh.kind)) prop(s, c, 'shape.inner', sh.kind === 'star' ? 'Inner radius' : 'Thickness', { min: 0.05, max: 0.95, step: 0.01, def: 0.45, fmt: (v) => (+v).toFixed(2) });
+    const f = section(body, 'Fill');
+    sw(f, 'Fill', () => sh.fillOn !== false, (v) => { sh.fillOn = v; });
+    seg(f, 'Type', [['solid', 'Solid'], ['gradient', 'Gradient']], () => sh.fillMode || 'solid', (v) => { sh.fillMode = v; setTimeout(() => I.render(true), 0); });
+    if (sh.fillMode === 'gradient') { color(f, 'From', () => sh.grad1 || '#19d3c5', (v) => { sh.grad1 = v; }); color(f, 'To', () => sh.grad2 || '#7c5cff', (v) => { sh.grad2 = v; }); slider(f, 'Angle', () => sh.gradAngle ?? 90, (v) => { sh.gradAngle = v; }, { min: 0, max: 360, step: 1, unit: '°', def: 90 }); }
+    else color(f, 'Color', () => sh.fill, (v) => { sh.fill = v; });
+    const o = section(body, 'Outline');
+    prop(o, c, 'shape.strokeW', 'Width', { min: 0, max: 80, step: 0.5, def: 0, clamp: (v) => Math.max(0, v) });
+    color(o, 'Color', () => sh.stroke, (v) => { sh.stroke = v; });
+    slider(o, 'Dashes', () => sh.dash || 0, (v) => { sh.dash = Math.max(0, v); }, { min: 0, max: 60, step: 1, def: 0 });
+    timing(body, c);
   }
 
   function tabMotion(body, c) { C.kfEditor.render(body, c, { section, commit, refreshers }); }
@@ -341,6 +453,20 @@
     const f = section(body, 'Fades');
     slider(f, 'Fade in', () => c.fadeIn, (v) => { c.fadeIn = C.clamp(v, 0, c.duration - c.fadeOut); }, { min: 0, max: Math.min(10, c.duration), step: 0.05, ...secs, def: 0 });
     slider(f, 'Fade out', () => c.fadeOut, (v) => { c.fadeOut = C.clamp(v, 0, c.duration - c.fadeIn); }, { min: 0, max: Math.min(10, c.duration), step: 0.05, ...secs, def: 0 });
+    const vs = section(body, 'Voice effects');
+    const st = C.voice.state(c);
+    const vg = C.h('<div class="voice-grid"></div>');
+    C.voice.PRESETS.forEach(([id, name, icon]) => {
+      const on = ((c.voice && c.voice.preset) || 'none') === id;
+      const b = C.h(`<button class="voice-btn ${on ? 'on' : ''}"><span>${icon}</span><small>${name}</small></button>`);
+      b.onclick = () => { C.begin(); c.voice = Object.assign({}, c.voice || {}, { preset: id }); commit('Voice: ' + name); C.voice.ensure(c); I.render(true); };
+      vg.appendChild(b);
+    });
+    vs.appendChild(vg);
+    slider(vs, 'Bass', () => (c.voice && c.voice.bass) || 0, (v) => { c.voice = Object.assign({}, c.voice || { preset: 'none' }, { bass: Math.round(v) }); }, { min: -12, max: 12, step: 1, unit: ' dB', def: 0 });
+    slider(vs, 'Treble', () => (c.voice && c.voice.treble) || 0, (v) => { c.voice = Object.assign({}, c.voice || { preset: 'none' }, { treble: Math.round(v) }); }, { min: -12, max: 12, step: 1, unit: ' dB', def: 0 });
+    sw(vs, 'Reduce noise', () => !!(c.voice && c.voice.denoise), (v) => { c.voice = Object.assign({}, c.voice || { preset: 'none' }, { denoise: v }); C.voice.ensure(c); });
+    vs.appendChild(C.h(`<p class="hint" style="margin-top:6px">${st && st.status === 'processing' ? '⏳ Processing… the effect will play as soon as it’s ready.' : 'Effects are rendered in the background so playback matches the export exactly.'}</p>`));
     if (c.kind === 'video') {
       const d = section(body, 'Separate');
       const b = C.h(`<button class="btn block">${C.icon('detach')}<span>Detach audio to its own track</span></button>`);

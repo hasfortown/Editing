@@ -20,6 +20,7 @@
   KF.get = (c, path) => {
     const parts = path.split('.');
     if (parts[0] === 'e') { const e = (c.effects || []).find((x) => x.id === parts[1]); return e ? e.p[parts[2]] : undefined; }
+    if (parts[0] === 'm') { const m = (c.masks || []).find((x) => x.id === parts[1]); return m ? m[parts[2]] : undefined; }
     let o = c;
     for (const p of parts) { if (o == null) return undefined; o = o[p]; }
     return o;
@@ -27,6 +28,7 @@
   KF.set = (c, path, v) => {
     const parts = path.split('.');
     if (parts[0] === 'e') { const e = (c.effects || []).find((x) => x.id === parts[1]); if (e) e.p[parts[2]] = v; return; }
+    if (parts[0] === 'm') { const m = (c.masks || []).find((x) => x.id === parts[1]); if (m) m[parts[2]] = v; return; }
     let o = c;
     for (let i = 0; i < parts.length - 1; i++) { if (o[parts[i]] == null) o[parts[i]] = {}; o = o[parts[i]]; }
     o[parts[parts.length - 1]] = v;
@@ -57,6 +59,9 @@
     const o = Object.assign({}, c, { t: Object.assign({}, c.t), fx: Object.assign({}, c.fx) });
     if (c.text) o.text = Object.assign({}, c.text);
     if (c.grade) o.grade = Object.assign({}, c.grade);
+    if (c.warp) o.warp = Object.assign({}, c.warp);
+    if (c.shape) o.shape = Object.assign({}, c.shape);
+    if (c.masks) o.masks = c.masks.map((m) => Object.assign({}, m));
     if (c.effects) o.effects = c.effects.map((e) => Object.assign({}, e, { p: Object.assign({}, e.p) }));
     for (const path in c.kf) if (c.kf[path] && c.kf[path].length) KF.set(o, path, KF.value(c, path, local));
     return o;

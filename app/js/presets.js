@@ -35,6 +35,7 @@
     }
   };
   P.refPreset = (ref) => {
+    if (ref.startsWith('ov:')) { for (const [, list] of C.fx.OVERLAYS) { const o = list.find((x) => 'ov:' + x.id === ref); if (o) return o; } return null; }
     if (ref.startsWith('fx:')) { const d = C.fx.def(ref.slice(3)); return d ? { id: ref, name: d.name, effects: [C.fx.newEffect(d.id)] } : null; }
     return P.byId(ref.replace(/^preset:/, ''));
   };

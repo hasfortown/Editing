@@ -22,6 +22,7 @@
       <div id="collabAvatars" style="display:flex;align-items:center;padding-left:6px"></div>
       <button class="btn" id="btnCollab" data-tip="Edit together with friends using a join code"><span class="ico" data-icon="users"></span>Collaborate</button>
       <div class="sep"></div>
+      <button class="icon-btn" id="btnTheme" data-tip="Appearance & themes"></button>
       <button class="icon-btn" id="btnPalette" data-tip="Command palette (Ctrl+K)"></button>
       <button class="icon-btn" id="btnUndo" data-tip="Undo (Ctrl+Z)"></button>
       <button class="icon-btn" id="btnRedo" data-tip="Redo (Ctrl+Shift+Z)"></button>
@@ -45,6 +46,7 @@
         <button class="rail-btn" data-panel="text"><span class="ico" data-icon="text"></span><span>Text</span></button>
         <button class="rail-btn" data-panel="stickers"><span class="ico" data-icon="smile"></span><span>Stickers</span></button>
         <button class="rail-btn" data-panel="effects"><span class="ico" data-icon="wand"></span><span>Effects</span></button>
+        <button class="rail-btn" data-panel="overlays"><span class="ico" data-icon="layers"></span><span>Overlays</span></button>
         <button class="rail-btn" data-panel="transitions"><span class="ico" data-icon="transition"></span><span>Transitions</span></button>
         <button class="rail-btn" data-panel="filters"><span class="ico" data-icon="filter"></span><span>Filters</span></button>
         <button class="rail-btn" data-panel="elements"><span class="ico" data-icon="shapes"></span><span>Elements</span></button>
@@ -138,7 +140,7 @@
   <nav class="ph-tools" id="phTools"></nav>
   <div class="ph-view" id="phView"><canvas id="phCv"></canvas><canvas id="phOv"></canvas><div class="ph-empty" id="phEmpty"></div></div>
   <aside class="ph-side">
-    <div class="ph-side-top"><div class="tabs" id="phSideTabs"><button class="tab on" data-t="props">Properties</button><button class="tab" data-t="history">History</button></div><div class="ph-props" id="phProps"></div></div>
+    <div class="ph-side-top"><div class="tabs" id="phSideTabs"><button class="tab on" data-t="props">Properties</button><button class="tab" data-t="color">Color</button><button class="tab" data-t="history">History</button></div><div class="ph-props" id="phProps"></div></div>
     <div class="ph-layers" id="phLayers"></div>
   </aside>
   <div class="ph-status" id="phStatus"></div>
@@ -152,6 +154,7 @@
 <script src="js/store.js"></script>
 <script src="js/keyframes.js"></script>
 <script src="js/media.js"></script>
+<script src="js/geometry.js"></script>
 <script src="js/render.js"></script>
 <script src="js/grade.js"></script>
 <script src="js/textfx.js"></script>
@@ -168,11 +171,15 @@
 <script src="js/kfeditor.js"></script>
 <script src="js/emoji.js"></script>
 <script src="js/record.js"></script>
+<script src="js/audiofx.js"></script>
+<script src="js/penmask.js"></script>
+<script src="js/theme.js"></script>
 <script src="js/home.js"></script>
 <script src="js/palette.js"></script>
 <script src="js/photo-core.js"></script>
 <script src="js/photo-ui.js"></script>
 <script src="js/photo-panels.js"></script>
+  <script src="js/photo-extra.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

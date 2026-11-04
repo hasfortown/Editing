@@ -17,6 +17,11 @@
     { id: 'spin', name: 'Spin', anim: 'tr-spin' },
     { id: 'blur', name: 'Blur', anim: 'tr-blur' },
     { id: 'glitch', name: 'Glitch', anim: 'tr-glitch' },
+    { id: 'cube', name: '3D cube', anim: 'tr-cube' },
+    { id: 'flip3d', name: '3D card flip', anim: 'tr-flip' },
+    { id: 'tumble', name: '3D tumble', anim: 'tr-tumble' },
+    { id: 'door', name: '3D door', anim: 'tr-door' },
+    { id: 'swing', name: '3D swing in', anim: 'tr-swing' },
   ];
   C.ANIMS_IN = [['none', 'None'], ['fade', 'Fade'], ['pop', 'Pop'], ['slideUp', 'Rise'], ['slideDown', 'Drop'], ['slideLeft', 'From right'], ['slideRight', 'From left'], ['zoomIn', 'Zoom in'], ['zoomOut', 'Zoom out'], ['spin', 'Spin'], ['blur', 'Focus'], ['typewriter', 'Typewriter']];
   C.ANIMS_OUT = [['none', 'None'], ['fade', 'Fade'], ['pop', 'Shrink'], ['slideUp', 'Rise'], ['slideDown', 'Drop'], ['slideLeft', 'To left'], ['slideRight', 'To right'], ['zoomIn', 'Zoom in'], ['zoomOut', 'Zoom out'], ['spin', 'Spin'], ['blur', 'Defocus']];
@@ -103,7 +108,7 @@
         if (d && C.prevAdjacent(c)) fadeIn = Math.max(fadeIn, d);
         const n = C.nextAdjacent(c); const nd = n ? C.trDur(n) : 0;
         if (nd) { const room = m.duration ? (m.duration - c.in) / c.speed - c.duration : nd; const ext = Math.max(0, Math.min(nd, room)); dur += ext; fadeOut = Math.max(fadeOut, ext); }
-        segs.push({ path: C.mediaPath(m), start: c.start, in: c.in, dur, speed: c.speed, volume: c.volume, fadeIn, fadeOut, volExpr: C.kf.volumeExpr(c) });
+        segs.push({ path: (C.voice && C.voice.processedPath(c)) || C.mediaPath(m), start: c.start, in: c.in, dur, speed: c.speed, volume: c.volume, fadeIn, fadeOut, volExpr: C.kf.volumeExpr(c) });
       }
     }
     return { segments: segs };
@@ -162,6 +167,7 @@
   C.contentSize = (c, W, H, ctx) => {
     if (c.kind === 'text') return measureText(ctx, c, W, H);
     if (c.kind === 'color') return { w: W, h: H };
+    if (c.kind === 'shape') { const k = Math.min(W, H) / 1080, pad = ((c.shape.strokeW || 0) + 2) * k * 2; return { w: Math.abs(c.shape.w) * k + pad, h: Math.abs(c.shape.h) * k + pad }; }
     const m = C.mediaOf(c);
     const mw = (m && m.width) || 16, mh = (m && m.height) || 9;
     const r = c.t.fit === 'cover' ? Math.max(W / mw, H / mh) : c.t.fit === 'stretch' ? null : Math.min(W / mw, H / mh);
@@ -224,7 +230,73 @@
     if (C.fx.hasLayer(c.effects)) C.fx.applyToCanvas(ctx, c.effects, env, alpha);
   }
 
-  // Draw one clip. o: {alpha, dx, dy, scale, rot, blur, clipFn}
+  const styleOn = (st) => st && Object.values(st).some((x) => x && x.on);
+  C.scaleStyles = (st, k) => {
+    const o = {};
+    for (const n in st) { const v = st[n]; if (!v || !v.on) continue; o[n] = Object.assign({}, v); for (const key of ['distance', 'size']) if (o[n][key] != null) o[n][key] *= k; }
+    return o;
+  };
+
+  // Masks: shapes in content space (fractions of the content box)
+  C.MASK_TYPES = [['path', 'Pen (freeform)'], ['rect', 'Rectangle'], ['ellipse', 'Circle / ellipse'], ['rounded', 'Rounded rectangle'], ['star', 'Star'], ['heart', 'Heart'], ['triangle', 'Triangle'], ['linear', 'Split (linear)'], ['mirror', 'Band (mirror)']];
+  function applyMasks(cc, masks, cw, ch) {
+    const mc = C.fx.canvas('maskAll', cw, ch); const m = mc._cx;
+    m.setTransform(1, 0, 0, 1, 0, 0); m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1; m.filter = 'none'; m.clearRect(0, 0, cw, ch);
+    masks.forEach((mk, i) => {
+      const t = C.fx.canvas('mask1', cw, ch); const x = t._cx;
+      x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1; x.clearRect(0, 0, cw, ch);
+      const f = ((mk.feather || 0) / 100) * Math.min(cw, ch) * 0.2;
+      x.filter = f > 0.3 ? `blur(${f}px)` : 'none';
+      x.fillStyle = '#fff';
+      x.save(); x.translate((0.5 + (mk.x || 0)) * cw, (0.5 + (mk.y || 0)) * ch); x.rotate(((mk.rot || 0) * Math.PI) / 180);
+      const w = (mk.w ?? 0.5) * cw, h = (mk.h ?? 0.5) * ch, big = (cw + ch) * 3;
+      if (mk.type === 'path') { x.scale(mk.w ?? 1, mk.h ?? 1); x.beginPath(); C.geo.tracePath(x, mk.pts, cw, ch, true); x.fill(); }
+      else if (mk.type === 'linear') x.fillRect(-big, 0, big * 2, big);
+      else if (mk.type === 'mirror') x.fillRect(-big, -h / 2, big * 2, h);
+      else { C.geo.shapePath(x, { kind: mk.type === 'rect' ? 'rect' : mk.type, w, h, radius: mk.round || 0, points: 5, inner: 0.45 }); x.fill(); }
+      x.restore(); x.filter = 'none';
+      if (mk.invert) { x.globalCompositeOperation = 'xor'; x.fillStyle = '#fff'; x.fillRect(0, 0, cw, ch); x.globalCompositeOperation = 'source-over'; }
+      if (i === 0 && (mk.mode === 'subtract')) { m.fillStyle = '#fff'; m.fillRect(0, 0, cw, ch); }
+      m.globalCompositeOperation = i === 0 ? (mk.mode === 'subtract' ? 'destination-out' : 'source-over') : mk.mode === 'subtract' ? 'destination-out' : mk.mode === 'intersect' ? 'destination-in' : 'source-over';
+      m.drawImage(t, 0, 0);
+      m.globalCompositeOperation = 'source-over';
+    });
+    const x = cc._cx; x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'destination-in'; x.drawImage(mc, 0, 0); x.globalCompositeOperation = 'source-over';
+  }
+
+  function drawShapeClip(g, c, sz, k) {
+    const s = c.shape; const w = s.w * k, h = s.h * k;
+    C.geo.shapePath(g, { kind: s.kind, w, h, radius: s.radius, points: s.points, inner: s.inner });
+    if (s.fillOn !== false && s.kind !== 'line') {
+      if (s.fillMode === 'gradient') { const a = ((s.gradAngle ?? 90) * Math.PI) / 180, r = Math.hypot(w, h) / 2; const gr = g.createLinearGradient(-Math.sin(a) * r, Math.cos(a) * -r, Math.sin(a) * r, Math.cos(a) * r); gr.addColorStop(0, s.grad1 || '#19d3c5'); gr.addColorStop(1, s.grad2 || '#7c5cff'); g.fillStyle = gr; }
+      else g.fillStyle = s.fill;
+      g.fill(s.kind === 'ring' ? 'evenodd' : 'nonzero');
+    }
+    if ((s.strokeW || 0) > 0 || s.kind === 'line') { g.lineWidth = Math.max(1, (s.strokeW || 8) * k); g.strokeStyle = s.kind === 'line' && !s.strokeW ? s.fill : s.stroke; g.lineJoin = 'round'; g.lineCap = 'round'; if (s.dash) g.setLineDash([s.dash * k, s.dash * k]); g.stroke(); g.setLineDash([]); }
+  }
+
+  function paintContent(g, c, sz, src, W, H, an, local, fl) {
+    g.filter = fl;
+    if (c.kind === 'text') drawText(g, c, W, H, an.chars, local);
+    else if (c.kind === 'color') { g.fillStyle = c.color; g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h); }
+    else if (c.kind === 'shape') drawShapeClip(g, c, sz, Math.min(W, H) / 1080);
+    else g.drawImage(src, -sz.w / 2, -sz.h / 2, sz.w, sz.h);
+    g.filter = 'none';
+    if (c.fx.temperature && c.kind !== 'text' && c.kind !== 'shape') {
+      const a0 = g.globalAlpha, op = g.globalCompositeOperation;
+      g.globalCompositeOperation = 'source-atop'; g.globalAlpha = a0 * Math.min(1, Math.abs(c.fx.temperature) / 100) * 0.5;
+      g.fillStyle = c.fx.temperature > 0 ? '#ff9a2e' : '#2e8bff'; g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h);
+      g.globalAlpha = a0; g.globalCompositeOperation = op;
+    }
+    if (c.fx.vignette && c.kind !== 'text' && c.kind !== 'shape') {
+      const op = g.globalCompositeOperation; g.globalCompositeOperation = 'source-atop';
+      const gr = g.createRadialGradient(0, 0, Math.min(sz.w, sz.h) * 0.25, 0, 0, Math.hypot(sz.w, sz.h) / 2);
+      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, `rgba(0,0,0,${c.fx.vignette / 100})`);
+      g.fillStyle = gr; g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h); g.globalCompositeOperation = op;
+    }
+  }
+
+  // Draw one clip. o: {alpha, dx, dy, scale, rot, blur, clipFn, g3:{rx,ry,tx,tz}}
   C.drawClip = (ctx, c0, t, W, H, src, o = {}) => {
     const local = t - c0.start;
     const c = C.evalClip(c0, Math.min(local, c0.duration + 10));
@@ -233,13 +305,21 @@
     const fxs = c.effects && c.effects.length ? c.effects : null;
     const env = { W, H, t: local, T: t, dur: c.duration, seed: fxs ? C.fx.seedOf(c.id) : 1 };
     if (fxs) C.fx.applyPre(an, fxs, env);
-    let alpha = c.t.opacity * an.alpha * (o.alpha ?? 1) * fadeAlpha(c, local);
+    const alpha = c.t.opacity * an.alpha * (o.alpha ?? 1) * fadeAlpha(c, local);
     if (alpha <= 0.002) return;
     if ((c.kind === 'video' || c.kind === 'image') && !src) return;
     if ((c.kind === 'video' || c.kind === 'image') && c.grade && !C.UI.bypassGrade && C.grade.active(c.grade)) src = C.grade.apply(src, c.grade, Math.max(W, H) * 1.25, Math.max(W, H) * 1.25);
+    const k = Math.min(W, H) / 1080;
     const shape = fxs ? C.fx.shape(fxs) : null;
     const comp = fxs ? C.fx.compositeFilter(fxs, W) : 'none';
-    const layered = !!fxs && (C.fx.hasLayer(fxs) || !!shape || comp !== 'none');
+    const styles = styleOn(c.styles) ? c.styles : null;
+    const masks = (c.masks || []).filter((m) => m && m.on !== false);
+    const tt = c.t, g3 = o.g3 || null;
+    const has3d = !!(tt.rx || tt.ry || tt.z || g3);
+    const warp = C.geo.warpActive(c.warp) ? c.warp : null;
+    const geom = has3d || !!warp;
+    const needContent = geom || masks.length > 0 || !!shape;
+    const layered = (!!fxs && (C.fx.hasLayer(fxs) || comp !== 'none')) || !!styles;
     const blend = c.blend || 'source-over';
     let L = null, g = ctx;
     if (layered) {
@@ -247,55 +327,65 @@
       g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none'; g.clearRect(0, 0, W, H);
     }
     const sz = C.contentSize(c, W, H, g);
+    const cx = tt.x * W + (o.dx || 0) + an.dx * W, cy = tt.y * H + (o.dy || 0) + an.dy * H;
+    const rot = tt.rotation + an.rot + (o.rot || 0);
+    const sc = tt.scale * an.scale * (o.scale ?? 1);
+    const fl = filterStr(c.fx, W, an.blur + (o.blur || 0));
     g.save();
     if (!layered) {
       if (o.clipFn) { g.beginPath(); o.clipFn(g); g.clip(); }
       g.globalAlpha = C.clamp(alpha, 0, 1);
       if (blend !== 'source-over') g.globalCompositeOperation = blend;
     }
-    g.translate(c.t.x * W + (o.dx || 0) + an.dx * W, c.t.y * H + (o.dy || 0) + an.dy * H);
-    const rot = (c.t.rotation + an.rot + (o.rot || 0)) * Math.PI / 180;
-    if (rot) g.rotate(rot);
-    const sc = c.t.scale * an.scale * (o.scale ?? 1);
-    g.scale(sc * (c.t.flipH ? -1 : 1), sc * (c.t.flipV ? -1 : 1));
-    const rr = shape ? (Math.min(sz.w, sz.h) * shape.radius) / 100 : 0;
-    if (shape) { g.save(); g.beginPath(); g.roundRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h, rr); g.clip(); }
-    g.filter = filterStr(c.fx, W, an.blur + (o.blur || 0));
-    if (c.kind === 'text') drawText(g, c, W, H, an.chars, local);
-    else if (c.kind === 'color') { g.fillStyle = c.color; g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h); }
-    else g.drawImage(src, -sz.w / 2, -sz.h / 2, sz.w, sz.h);
-    g.filter = 'none';
-    const baseA = layered ? 1 : C.clamp(alpha, 0, 1);
-    if (c.fx.temperature && c.kind !== 'text') {
-      g.globalCompositeOperation = 'soft-light';
-      g.globalAlpha = Math.min(1, Math.abs(c.fx.temperature) / 100) * baseA;
-      g.fillStyle = c.fx.temperature > 0 ? '#ff9a2e' : '#2e8bff';
-      g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h);
-      g.globalCompositeOperation = layered ? 'source-over' : blend;
-    }
-    if (c.fx.vignette && c.kind !== 'text') {
-      g.globalAlpha = baseA;
-      const gr = g.createRadialGradient(0, 0, Math.min(sz.w, sz.h) * 0.25, 0, 0, Math.hypot(sz.w, sz.h) / 2);
-      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, `rgba(0,0,0,${c.fx.vignette / 100})`);
-      g.fillStyle = gr; g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h);
-    }
-    if (shape) {
-      g.restore();
-      if (shape.border > 0) {
-        g.globalAlpha = baseA; g.globalCompositeOperation = 'source-over';
-        g.lineWidth = (shape.border * (W / 1920)) / Math.max(0.01, Math.abs(sc)); g.strokeStyle = shape.color;
-        g.beginPath(); g.roundRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h, rr); g.stroke();
+    if (!needContent) {
+      g.translate(cx, cy); if (rot) g.rotate((rot * Math.PI) / 180);
+      g.scale(sc * (tt.flipH ? -1 : 1), sc * (tt.flipV ? -1 : 1));
+      paintContent(g, c, sz, src, W, H, an, local, fl);
+    } else {
+      // render the clip's content into its own canvas (masks, rounding, 3D and warps work on it)
+      let rs = C.clamp(Math.abs(sc), 0.05, 4);
+      let cw = Math.max(2, Math.round(sz.w * rs)), ch = Math.max(2, Math.round(sz.h * rs));
+      const cap = 4096; if (cw > cap || ch > cap) { const f = cap / Math.max(cw, ch); cw = Math.round(cw * f); ch = Math.round(ch * f); }
+      const cc = C.fx.canvas('content', cw, ch); const x = cc._cx;
+      x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'source-over'; x.filter = 'none'; x.clearRect(0, 0, cw, ch);
+      x.save(); x.translate(cw / 2, ch / 2); x.scale(cw / sz.w, ch / sz.h);
+      const rr = shape ? (Math.min(sz.w, sz.h) * shape.radius) / 100 : 0;
+      if (shape) { x.save(); x.beginPath(); x.roundRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h, rr); x.clip(); }
+      paintContent(x, c, sz, src, W, H, an, local, fl);
+      if (shape) {
+        x.restore();
+        if (shape.border > 0) { x.lineWidth = (shape.border * (W / 1920)) / Math.max(0.01, Math.abs(sc)) * 2; x.strokeStyle = shape.color; x.beginPath(); x.roundRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h, rr); x.save(); x.clip(); x.stroke(); x.restore(); }
+      }
+      x.restore();
+      if (masks.length) applyMasks(cc, masks, cw, ch);
+      const fx = tt.flipH ? -1 : 1, fy = tt.flipV ? -1 : 1;
+      if (!geom) {
+        g.translate(cx, cy); if (rot) g.rotate((rot * Math.PI) / 180);
+        g.scale((fx * sc * sz.w) / cw, (fy * sc * sz.h) / ch);
+        g.drawImage(cc, -cw / 2, -ch / 2);
+      } else {
+        const d = (tt.persp ?? 1) * 1.6 * Math.max(W, H);
+        const w2 = sz.w * sc, h2 = sz.h * sc;
+        const wf = warp ? C.geo.warpFn(warp, w2, h2, local) : (u, v) => [(u - 0.5) * w2, (v - 0.5) * h2, 0];
+        const rx = (tt.rx || 0) + ((g3 && g3.rx) || 0), ry = (tt.ry || 0) + ((g3 && g3.ry) || 0);
+        const tz = (tt.z || 0) * k * 10 + ((g3 && g3.tz) || 0), tx = (g3 && g3.tx) || 0;
+        const map = (u, v) => { let p = wf(u, v); p = [p[0] * fx, p[1] * fy, p[2]]; p = C.geo.rot3(p, rx, ry, rot); p[0] += tx; p[2] += tz; return C.geo.project(p, cx, cy, d); };
+        const dense = warp && /wrap|sphere|fisheye|twist|arc/.test(warp.mode);
+        const cull = warp && (warp.mode === 'wrap' || warp.mode === 'sphere') ? (fx * fy > 0 ? 1 : -1) : 0;
+        C.geo.drawMesh(g, cc, cw, ch, dense ? 28 : warp ? 18 : 10, dense ? 18 : warp ? 12 : 10, map, { cull });
       }
     }
     g.restore();
     if (layered) {
-      C.fx.applyLayer(L, fxs, env);
+      if (fxs) C.fx.applyLayer(L, fxs, env);
+      let out = L.cv;
+      if (styles && C.photo && C.photo.applyStyles) out = C.photo.applyStyles(L.cv, C.scaleStyles(styles, k), W, H);
       ctx.save();
       if (o.clipFn) { ctx.beginPath(); o.clipFn(ctx); ctx.clip(); }
       ctx.globalAlpha = C.clamp(alpha, 0, 1);
       ctx.globalCompositeOperation = blend;
       ctx.filter = comp;
-      ctx.drawImage(L.cv, 0, 0);
+      ctx.drawImage(out, 0, 0);
       ctx.restore();
     }
   };
@@ -313,6 +403,16 @@
         else { B(); ctx.save(); ctx.globalAlpha = (1 - p) * 2; ctx.fillStyle = col; ctx.fillRect(0, 0, W, H); ctx.restore(); }
         break;
       }
+      case 'cube': {
+        const a = 90 * p, r = (a * Math.PI) / 180, sW = W / 2;
+        const ga = { ry: a, tx: -sW * Math.sin(r), tz: sW - sW * Math.cos(r) }, gb = { ry: a - 90, tx: sW * Math.cos(r), tz: sW - sW * Math.sin(r) };
+        if (ga.tz > gb.tz) { A({ g3: ga }); B({ g3: gb }); } else { B({ g3: gb }); A({ g3: ga }); }
+        break;
+      }
+      case 'flip3d': { const z = Math.sin(p * Math.PI) * W * 0.35; if (p < 0.5) A({ g3: { ry: p * 180, tz: z } }); else B({ g3: { ry: (p - 1) * 180, tz: z } }); break; }
+      case 'tumble': { const z = Math.sin(p * Math.PI) * H * 0.35; if (p < 0.5) A({ g3: { rx: p * 180, tz: z } }); else B({ g3: { rx: (p - 1) * 180, tz: z } }); break; }
+      case 'door': { A(); const a = -90 * (1 - p), r = (a * Math.PI) / 180, sW = W / 2; B({ g3: { ry: a, tx: -sW + sW * Math.cos(r), tz: -sW * Math.sin(r) } }); break; }
+      case 'swing': { A({ alpha: 1 - p * 0.6 }); B({ g3: { rx: -70 * (1 - p), tz: (1 - p) * H * 0.5 }, alpha: p }); break; }
       case 'slideLeft': A(); B({ dx: (1 - p) * W }); break;
       case 'slideRight': A(); B({ dx: -(1 - p) * W }); break;
       case 'slideUp': A(); B({ dy: (1 - p) * H }); break;

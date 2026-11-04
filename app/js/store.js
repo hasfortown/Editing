@@ -17,6 +17,7 @@
     ...(C.textFX ? C.deep(C.textFX.DEFAULTS) : {}),
   });
 
+  C.defaultShape = (kind) => ({ kind, w: kind === 'line' ? 600 : kind === 'arrow' ? 600 : 500, h: kind === 'line' ? 0 : kind === 'arrow' ? 260 : kind === 'speech' ? 380 : 500, fill: '#19d3c5', fillOn: true, fillMode: 'solid', grad1: '#19d3c5', grad2: '#7c5cff', gradAngle: 90, stroke: '#ffffff', strokeW: kind === 'line' ? 10 : 0, radius: kind === 'rounded' ? 30 : 0, points: kind === 'polygon' ? 6 : 5, inner: kind === 'ring' ? 0.62 : kind === 'cross' ? 0.32 : 0.45, dash: 0 });
   C.newProject = (name = 'Untitled project') => {
     const p = {
       id: C.uid('p_'), name, version: 2,
@@ -103,8 +104,9 @@
       id: C.uid('c_'), trackId: null, kind: 'video', mediaId: null, name: 'Clip', start: 0, duration: 5, in: 0, speed: 1,
       volume: 1, muted: false, fadeIn: 0, fadeOut: 0, transition: null, t: C.defaultTransform(), fx: C.defaultFx(),
       anim: { in: 'none', out: 'none', dur: 0.5 }, audioDetached: false,
-      effects: [], kf: {}, blend: 'source-over', group: null, label: null,
+      effects: [], kf: {}, blend: 'source-over', group: null, label: null, masks: [], styles: {}, warp: null, voice: null,
     }, o);
+    if (c.kind === 'shape' && !c.shape) c.shape = C.defaultShape('rect');
     if (c.kind === 'text' && !c.text) c.text = C.defaultText();
     if (c.kind === 'color' && !c.color) c.color = '#2b2d42';
     if (c.kind === 'effect' && !c.name) c.name = 'Effect';
@@ -242,7 +244,7 @@
       c.t = Object.assign(C.defaultTransform(), c.t); c.fx = Object.assign(C.defaultFx(), c.fx);
       c.anim = Object.assign({ in: 'none', out: 'none', dur: 0.5 }, c.anim);
       if (c.kind === 'text') c.text = Object.assign(C.defaultText(), c.text);
-      c.effects = c.effects || []; c.kf = c.kf || {}; c.blend = c.blend || 'source-over';
+      c.effects = c.effects || []; c.kf = c.kf || {}; c.blend = c.blend || 'source-over'; c.masks = c.masks || []; c.styles = c.styles || {};
     }
     C.project = p;
     C.history = { undo: [], redo: [] }; C._txn = null;

@@ -10,7 +10,7 @@
     document.body.classList.toggle('mode-photo', m === 'photo');
     C.$$('#modeSwitch button').forEach((b) => b.classList.toggle('on', b.dataset.m === m));
     const menuBar = C.$('.menus');
-    menuBar.innerHTML = (m === 'photo' ? [['file', 'File'], ['edit', 'Edit'], ['image', 'Image'], ['layer', 'Layer'], ['select', 'Select'], ['filter', 'Filter'], ['help', 'Help']] : [['file', 'File'], ['edit', 'Edit'], ['clip', 'Clip'], ['help', 'Help']]).map(([k, l]) => `<button class="menu-btn" data-menu="${k}">${l}</button>`).join('');
+    menuBar.innerHTML = (m === 'photo' ? [['file', 'File'], ['edit', 'Edit'], ['image', 'Image'], ['layer', 'Layer'], ['select', 'Select'], ['filter', 'Filter'], ['view', 'View'], ['help', 'Help']] : [['file', 'File'], ['edit', 'Edit'], ['clip', 'Clip'], ['help', 'Help']]).map(([k, l]) => `<button class="menu-btn" data-menu="${k}">${l}</button>`).join('');
     C.app.wireMenus();
     if (m === 'photo') {
       C.engine.pause();
@@ -112,6 +112,7 @@
     const box = C.$('#phProps'); if (!box) return;
     C.$$('#phSideTabs button').forEach((b) => b.classList.toggle('on', b.dataset.t === PP.tab));
     if (PP.tab === 'history') { box.innerHTML = ''; box.appendChild(historyEl()); return; }
+    if (PP.tab === 'color') { if (!box.querySelector('.cp')) { box.innerHTML = ''; C.photoX.colorPanel(box); } return; }
     if (info && !info.structural && box.contains(document.activeElement)) return;
     box.innerHTML = '';
     const L = P.active();
@@ -580,6 +581,10 @@
       { label: 'Fill with foreground', icon: 'bucket', key: 'Alt+Del', disabled: !has(), action: () => PP.fill(false) },
       { label: 'Fill with background', icon: 'bucket', key: 'Ctrl+Del', disabled: !has(), action: () => PP.fill(true) },
       { label: 'Free transform', icon: 'move', key: 'Ctrl+T', disabled: !has(), action: () => PU.setTool('move') },
+      { label: 'Perspective / distort', icon: 'grid', disabled: !has(), action: () => C.photoX.startTransform('distort') },
+      { label: 'Warp', icon: 'wave', disabled: !has(), action: () => C.photoX.startTransform('warp') },
+      '-',
+      { label: 'Stroke path with brush color', icon: 'pen', disabled: !has(), action: () => C.photoX.penToStroke() },
     ],
     image: () => [
       ...Object.entries(P.ADJUST).filter(([k]) => k !== 'look').map(([k, v]) => ({ label: 'Adjust · ' + v.name + '…', icon: 'adjust', disabled: !has(), action: () => PP.adjustDialog(k) })),
@@ -607,6 +612,11 @@
         { label: 'Convert to pixels', icon: 'photo', disabled: !L || L.type === 'raster' || L.type === 'adjust', action: () => P.act('Rasterize', () => P.rasterize(L)) },
         { label: 'Bring forward', icon: 'chevronDown', key: 'Ctrl+]', disabled: !L, action: () => PP.arrange(1) },
         { label: 'Send backward', icon: 'chevronDown', key: 'Ctrl+[', disabled: !L, action: () => PP.arrange(-1) },
+        { label: 'Mask from pen path', icon: 'pen', disabled: !L || !PU.pen || PU.pen.pts.length < 2, action: () => C.photoX.penToMask() },
+        { label: 'Shape layer from pen path', icon: 'shapes', disabled: !PU.pen || PU.pen.pts.length < 2, action: () => C.photoX.penToShape() },
+        '-',
+        ...[['left', 'Align left'], ['hcenter', 'Align horizontal centers'], ['right', 'Align right'], ['top', 'Align top'], ['vcenter', 'Align vertical centers'], ['bottom', 'Align bottom']].map(([k, l]) => ({ label: l + (P.sel ? ' (to selection)' : ''), icon: 'fit', disabled: !L, action: () => C.photoX.align(k) })),
+        '-',
         { label: 'Merge down', icon: 'merge', key: 'Ctrl+E', disabled: !L, action: PP.mergeDown },
         { label: 'Flatten image', icon: 'layers', disabled: !has(), action: PP.flatten },
       ];
@@ -616,9 +626,28 @@
       { label: 'Deselect', icon: 'x', key: 'Ctrl+D', disabled: !P.sel, action: () => { P.deselect(); PU.redraw(); } },
       { label: 'Invert selection', icon: 'swap', key: 'Ctrl+Shift+I', disabled: !has(), action: () => { P.invertSelection(); PU.redraw(); } },
       { label: 'Feather…', icon: 'droplet', disabled: !P.sel, action: PP.featherDialog },
+      { label: 'Modify · Expand…', icon: 'plus', disabled: !P.sel, action: () => C.photoX.modify('expand') },
+      { label: 'Modify · Contract…', icon: 'minus', disabled: !P.sel, action: () => C.photoX.modify('contract') },
+      { label: 'Modify · Smooth…', icon: 'droplet', disabled: !P.sel, action: () => C.photoX.modify('smooth') },
+      { label: 'Modify · Border…', icon: 'marquee', disabled: !P.sel, action: () => C.photoX.modify('border') },
+      '-',
+      { label: 'Color range…', icon: 'eyedrop', disabled: !has(), action: C.photoX.colorRange },
       { label: 'Select layer pixels', icon: 'layers', disabled: !has(), action: PP.selectLayerPixels },
+      { label: 'Quick selection brush', icon: 'sparkles', key: 'K', disabled: !has(), action: () => PU.setTool('quick') },
+      { label: (P.ui.quickMask ? '✓ ' : '') + 'Quick mask mode', icon: 'mask', key: 'Q', disabled: !has(), action: C.photoX.toggleQuickMask },
+      '-',
+      { label: 'Path → selection', icon: 'pen', key: 'Enter', disabled: !PU.pen || PU.pen.pts.length < 2, action: () => C.photoX.penToSelection() },
     ],
-    filter: () => C.fx.CATS.filter((c) => c !== 'Motion').flatMap((cat) => C.fx.DEFS.filter((d) => d.cat === cat && d.phase === 'layer').map((d) => ({ label: `${cat} · ${d.name}…`, icon: 'sparkles', disabled: !has(), action: () => PP.filterDialog(d.id) }))),
+    view: () => [
+      { label: 'Zoom in', icon: 'zoomIn', key: 'Ctrl++', action: () => PU.zoomAt(1.25) },
+      { label: 'Zoom out', icon: 'zoomOut', key: 'Ctrl+-', action: () => PU.zoomAt(0.8) },
+      { label: 'Fit on screen', icon: 'fit', key: 'Ctrl+0', action: PU.fit },
+      '-',
+      { label: (C.photoX.grid ? '✓ ' : '') + 'Show grid', icon: 'grid', key: "Ctrl+'", action: () => C.photoX.toggle('grid') },
+      { label: (C.photoX.thirds ? '✓ ' : '') + 'Rule of thirds', icon: 'grid', action: () => C.photoX.toggle('thirds') },
+      { label: (C.photoX.snap ? '✓ ' : '') + 'Snap to canvas edges & center', icon: 'magnet', action: () => C.photoX.toggle('snap') },
+    ],
+    filter: () => [{ label: 'Liquify…', icon: 'smudge', key: 'Ctrl+Shift+X', disabled: !has(), action: C.photoX.liquify }, '-'].concat(C.fx.CATS.filter((c) => c !== 'Motion').flatMap((cat) => C.fx.DEFS.filter((d) => d.cat === cat && d.phase === 'layer').map((d) => ({ label: `${cat} · ${d.name}…`, icon: 'sparkles', disabled: !has(), action: () => PP.filterDialog(d.id) })))),
   };
   PP.exportMenu = (btn) => {
     if (!P.doc) return C.toast('Open or create an image first', 'info');
@@ -644,6 +673,7 @@
         c: () => PP.copy(e.shiftKey), x: PP.cut, v: PP.paste, j: () => P.doc && P.act('Duplicate layer', () => P.duplicate(P.active())), e: () => (e.shiftKey ? PP.flatten() : PP.mergeDown()),
         a: () => { P.selectAll(); PU.redraw(); }, d: () => { P.deselect(); PU.redraw(); }, i: () => { if (e.shiftKey) { P.invertSelection(); PU.redraw(); } else PP.adjustDialog('invert'); }, t: () => PU.setTool('move'),
         '0': PU.fit, '=': () => PU.zoomAt(1.25), '+': () => PU.zoomAt(1.25), '-': () => PU.zoomAt(0.8), '1': () => { PU.view.z = 1; PU.fit(); PU.zoomAt(1 / PU.view.z); }, ']': () => PP.arrange(1), '[': () => PP.arrange(-1),
+        "'": () => C.photoX.toggle('grid'), ...(e.shiftKey ? { x: C.photoX.liquify } : {}),
         delete: () => PP.fill(true), backspace: () => PP.fill(true), l: () => PP.adjustDialog('levels'), m: () => PP.adjustDialog('curves'), u: () => PP.adjustDialog('hueSat'), k: () => C.palette.open(),
       };
       if (map[k]) { e.preventDefault(); map[k](); return true; }
@@ -651,15 +681,27 @@
     }
     if (C.isTyping()) return false;
     if (e.key === ' ') { e.preventDefault(); if (!e.repeat) { PU.spaceDown(true); const up = (u) => { if (u.key === ' ') { PU.spaceDown(false); removeEventListener('keyup', up); } }; addEventListener('keyup', up); } return true; }
+    const X = C.photoX;
     if (e.key === 'Enter' && PU.cropping()) { PU.applyCrop(); return true; }
-    if (e.key === 'Escape') { if (PU.cropping()) PU.cancelCrop(); else { P.deselect(); PU.redraw(); } return true; }
+    if (e.key === 'Enter' && X.xf) { X.applyTransform(); return true; }
+    if (e.key === 'Enter' && X.poly) { X.closePoly(); return true; }
+    if (e.key === 'Enter' && PU.tool === 'pen' && PU.pen.pts.length > 1) { X.penToSelection(); return true; }
+    if (e.key === 'Escape') {
+      if (PU.cropping()) PU.cancelCrop(); else if (X.xf) X.cancelTransform(); else if (X.poly) { X.poly = null; PU.redraw(); }
+      else if (PU.tool === 'pen' && PU.pen.pts.length) { PU.pen = { pts: [], closed: false }; PU.renderOptions(); PU.redraw(); }
+      else { P.deselect(); PU.redraw(); }
+      return true;
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && PU.tool === 'pen' && PU.pen.pts.length && !PU.pen.closed) { e.preventDefault(); PU.pen.pts.pop(); PU.redraw(); return true; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && X.poly) { e.preventDefault(); X.poly.pts.pop(); if (!X.poly.pts.length) X.poly = null; PU.redraw(); return true; }
+    if (k === 'q') { X.toggleQuickMask(); return true; }
     if ((e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); if (e.altKey) PP.fill(false); else PP.clear(); return true; }
     if (e.key === '[' || e.key === ']') { const o = PU.opts[PU.tool]; if (o && o.size) { o.size = C.clamp(Math.round(o.size * (e.key === ']' ? 1.15 : 1 / 1.15)), 1, 1000); PU.renderOptions(); PU.redraw(); } return true; }
     if (e.key.startsWith('Arrow') && PU.tool === 'move') { const L = P.active(); if (!L) return true; const d = e.shiftKey ? 10 : 1; e.preventDefault(); P.act('Nudge', () => { if (e.key === 'ArrowLeft') L.x -= d; if (e.key === 'ArrowRight') L.x += d; if (e.key === 'ArrowUp') L.y -= d; if (e.key === 'ArrowDown') L.y += d; }); return true; }
     if (k === 'x') { [P.fg, P.bg] = [P.bg, P.fg]; C.emit('photo:colors'); return true; }
     if (k === 'd') { P.fg = '#000000'; P.bg = '#ffffff'; C.emit('photo:colors'); return true; }
-    const tool = PU.TOOLS.find((t) => t !== '-' && t[2].toLowerCase() === k);
-    if (tool) { PU.setTool(tool[0]); return true; }
+    const same = PU.TOOLS.filter((t) => t !== '-' && t[2].toLowerCase() === k);
+    if (same.length) { const i = same.findIndex((t) => t[0] === PU.tool); PU.setTool(same[e.shiftKey || i >= 0 ? (i + 1) % same.length : 0][0]); return true; }
     return false;
   };
 })(window.C);

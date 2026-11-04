@@ -10,7 +10,8 @@
     [['btnUndo', 'undo'], ['btnRedo', 'redo'], ['btnStart', 'skipStart'], ['btnPrevFrame', 'prevFrame'], ['btnNextFrame', 'nextFrame'], ['btnEnd', 'skipEnd'],
       ['btnLoop', 'loop'], ['btnSnapshot', 'camera'], ['btnFullscreen', 'fullscreen'], ['tlSelect', 'cursor'], ['tlBlade', 'blade'], ['tlSplit', 'split'],
       ['tlDelete', 'trash'], ['tlDuplicate', 'copy'], ['tlDetach', 'detach'], ['tlFreeze', 'freeze'], ['tlAddMarker', 'marker'], ['tlSnap', 'magnet'],
-      ['tlRipple', 'ripple'], ['tlZoomOut', 'zoomOut'], ['tlZoomIn', 'zoomIn'], ['tlFit', 'fit'], ['tlRecord', 'mic'], ['tlEffect', 'sparkles'], ['btnPalette', 'command']].forEach(([i, n]) => setIcon(i, n));
+      ['tlRipple', 'ripple'], ['tlZoomOut', 'zoomOut'], ['tlZoomIn', 'zoomIn'], ['tlFit', 'fit'], ['tlRecord', 'mic'], ['tlEffect', 'sparkles'], ['btnPalette', 'command'], ['btnTheme', 'sparkles']].forEach(([i, n]) => setIcon(i, n));
+    C.$('#btnTheme').onclick = () => C.theme.open();
     C.fx.installSvg();
     await C.presets.load();
     C.initTooltips();
@@ -29,7 +30,7 @@
     } catch (e) { console.warn('Autosave restore failed', e); C.newProject(); }
     try { const ts = JSON.parse(localStorage.getItem('cutroom.tlh') || 'null'); if (ts) document.documentElement.style.setProperty('--tl-h', ts + 'px'); } catch (_) {}
 
-    C.engine.init(); C.tl.init(); C.preview.init(); C.inspector.init(); C.library.init(); await C.home.init();
+    C.engine.init(); C.tl.init(); C.preview.init(); C.inspector.init(); C.library.init(); await C.home.init(); C.penMask.init();
     C.$$('#modeSwitch button').forEach((b) => (b.onclick = () => C.setMode(b.dataset.m)));
     wireTopbar(); wireTransport(); wireTimelineToolbar(); wireKeys(); wireDrop(); wireResizer(); wireMenus();
     A.afterLoad();
@@ -369,6 +370,7 @@
         ];
       },
       help: () => [
+        { label: 'Appearance & themes…', icon: 'sparkles', action: () => C.theme.open() },
         { label: 'Keyboard shortcuts', icon: 'keyboard', key: '?', action: () => A.showShortcuts() },
         { label: 'Command palette', icon: 'command', key: 'Ctrl+K', action: () => C.palette.open() },
         { label: 'Open developer tools', icon: 'info', key: 'F12', action: () => {} },

@@ -136,6 +136,7 @@
   }
 
   X.runVideo = async (name, el, close, outPath) => {
+    if (C.voice) await C.voice.ensureAll();
     const f = FORMATS[opts.format];
     const out = outPath || await window.native.saveExportDialog({ name, ext: f.ext, label: f.label });
     if (!out) return;
@@ -186,6 +187,7 @@
   };
 
   X.runAudio = async (name, el, close, outPath) => {
+    if (C.voice) await C.voice.ensureAll();
     const sp = span(); const dur = sp.dur;
     const ext = opts.aformat;
     const jobs = [];

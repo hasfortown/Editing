@@ -144,6 +144,7 @@
   }
   P.measureText = measureText;
   function shapePath(x, s) {
+    if (C.geo && !['line'].includes(s.kind)) { C.geo.shapePath(x, s); return; }
     const w = s.w, h = s.h;
     x.beginPath();
     switch (s.kind) {
@@ -196,6 +197,7 @@
   };
   const hexA = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
   const off = (angle, dist) => { const a = (angle * Math.PI) / 180; return [-Math.cos(a) * dist, Math.sin(a) * dist]; };
+  P.applyStyles = (base, st, W, H) => applyStyles(base, st, W, H);
   P.hasStyles = (L) => L.styles && Object.values(L.styles).some((s) => s && s.on);
   function applyStyles(base, st, W, H) {
     const R = tmp('sty_R', W, H); const r = R.getContext('2d');
@@ -288,7 +290,8 @@
     if (L.type === 'raster' && L._stroke) {
       const s = L._stroke;
       const lc = tmp('lay_s', L.canvas.width, L.canvas.height); const lx = lc.getContext('2d');
-      if (s.target === 'canvas') {
+      if (s.target === 'canvas' && s.mode === 'replace') lx.drawImage(s.cv, 0, 0);
+      else if (s.target === 'canvas') {
         lx.drawImage(L.canvas, 0, 0);
         lx.globalAlpha = s.opacity; lx.globalCompositeOperation = s.mode === 'erase' ? 'destination-out' : s.mode === 'atop' ? 'source-atop' : 'source-over';
         lx.drawImage(P.strokeClipped(s, L), 0, 0);
@@ -299,7 +302,7 @@
     if (mask) { x.globalCompositeOperation = 'destination-in'; x.drawImage(mask, 0, 0); x.globalCompositeOperation = 'source-over'; }
     return c;
   };
-  P.liveMask = (L) => { const s = L._stroke; const m = tmp('livemask', L.mask.width, L.mask.height); const x = m.getContext('2d'); x.drawImage(L.mask, 0, 0); x.globalAlpha = s.opacity; x.globalCompositeOperation = s.mode === 'erase' ? 'destination-out' : 'source-over'; x.drawImage(P.strokeClipped(s, L), 0, 0); return m; };
+  P.liveMask = (L) => { const s = L._stroke; if (s.mode === 'replace') return s.cv; const m = tmp('livemask', L.mask.width, L.mask.height); const x = m.getContext('2d'); x.drawImage(L.mask, 0, 0); x.globalAlpha = s.opacity; x.globalCompositeOperation = s.mode === 'erase' ? 'destination-out' : 'source-over'; x.drawImage(P.strokeClipped(s, L), 0, 0); return m; };
   // stroke canvas clipped by the selection (in the stroke target's coordinate space)
   P.strokeClipped = (s, L) => {
     if (!P.sel) return s.cv;

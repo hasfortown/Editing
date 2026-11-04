@@ -6,7 +6,7 @@
   Pv.init = () => {
     overlay = C.$('#overlay'); wrap = C.$('#canvasWrap');
     scratch = document.createElement('canvas').getContext('2d');
-    C.on('drawn', update); C.on('change', update);
+    C.on('drawn', update); C.on('change', update); C.on('inspectorRendered', update);
     C.on('select', () => { const f = C.UI.focusFx; if (f && !C.selection.has(f.clip)) C.UI.focusFx = null; update(); });
     overlay.addEventListener('pointerdown', onDown);
     overlay.addEventListener('dblclick', (e) => { const c = hit(e); if (c && c.kind === 'text') C.emit('focusText'); });
@@ -62,10 +62,32 @@
     }
   }
 
+  function updateMask(c) {
+    let mb = overlay.querySelector('.mask-box');
+    const f = C.UI.focusMask;
+    const ev = f && c && f.clip === c.id ? evalAt(c) : null;
+    const m = ev && (ev.masks || []).find((x) => x.id === f.mask);
+    if (!m || C.UI.playing || !C.inspector.isTab('mask') || m.type === 'path') { if (mb) mb.remove(); return; }
+    const { W, H, dw } = dims(); const k = dw / W;
+    const b = C.clipBox(scratch, ev, W, H); const a = (b.rot * Math.PI) / 180;
+    const lx = (m.x || 0) * b.w, ly = (m.y || 0) * b.h;
+    const cx = b.cx + lx * Math.cos(a) - ly * Math.sin(a), cy = b.cy + lx * Math.sin(a) + ly * Math.cos(a);
+    const line = m.type === 'linear' || m.type === 'mirror';
+    const w = line ? Math.max(b.w, b.h) * 1.2 : (m.w ?? 0.5) * b.w, h = m.type === 'linear' ? 0 : (m.h ?? 0.5) * b.h;
+    if (!mb) { mb = C.h('<div class="mask-box"><div class="hnd br" data-h="msize"></div><div class="rot-line"></div><div class="hnd rot" data-h="mrot"></div></div>'); overlay.appendChild(mb); }
+    mb.classList.toggle('ellipse', m.type === 'ellipse'); mb.classList.toggle('line', line);
+    Object.assign(mb.style, { left: (cx - w / 2) * k + 'px', top: (cy - h / 2) * k + 'px', width: w * k + 'px', height: Math.max(2, h * k) + 'px', transform: `rotate(${b.rot + (m.rot || 0)}deg)` });
+    mb.dataset.h = 'mmove';
+    const sz = mb.querySelector('.hnd.br'); sz.style.display = m.type === 'linear' ? 'none' : '';
+    PvState.box = b;
+  }
+  const PvState = {};
+
   function update() {
     if (!overlay) return;
     const c = activeSelected();
     updateFx(c);
+    updateMask(c);
     let box = overlay.querySelector('.sel-box');
     if (!c || C.UI.playing || c.kind === 'effect') { if (box) box.remove(); return; }
     const { W, H, dw } = dims(); const k = dw / W;
@@ -125,9 +147,31 @@
     addEventListener('pointermove', move); addEventListener('pointerup', up);
   }
 
+  function onMaskDown(e, handle) {
+    const c = activeSelected(); const f = C.UI.focusMask; if (!c || !f) return;
+    e.preventDefault(); e.stopPropagation();
+    const ev = evalAt(c); const m = (ev.masks || []).find((x) => x.id === f.mask); if (!m) return;
+    const { W, H } = dims(); const b = C.clipBox(scratch, ev, W, H); const a = (-b.rot * Math.PI) / 180;
+    const toLocal = (p) => { const dx = p.x - b.cx, dy = p.y - b.cy; return [(dx * Math.cos(a) - dy * Math.sin(a)) / b.w, (dx * Math.sin(a) + dy * Math.cos(a)) / b.h]; };
+    const p0 = toLocal(toProject(e)); const o = Object.assign({}, m);
+    const set = (key, v) => C.setParam(c, `m.${m.id}.${key}`, v);
+    C.begin(); let moved = false;
+    const mv = (ev2) => {
+      moved = true; const p = toLocal(toProject(ev2));
+      if (handle === 'mmove') { set('x', o.x + p[0] - p0[0]); set('y', o.y + p[1] - p0[1]); }
+      else if (handle === 'msize') { const ra = (-(o.rot || 0) * Math.PI) / 180; const dx = (p[0] - o.x) * b.w, dy = (p[1] - o.y) * b.h; const lx = dx * Math.cos(ra) - dy * Math.sin(ra), ly = dx * Math.sin(ra) + dy * Math.cos(ra); if (m.type !== 'mirror') set('w', C.clamp((Math.abs(lx) * 2) / b.w, 0.02, 3)); set('h', C.clamp((Math.abs(ly) * 2) / b.h, 0.02, 3)); }
+      else if (handle === 'mrot') { const ang = (Math.atan2((p[1] - o.y) * b.h, (p[0] - o.x) * b.w) * 180) / Math.PI + 90; let r = ((ang + 540) % 360) - 180; if (ev2.shiftKey) r = Math.round(r / 15) * 15; set('rot', r); }
+      C.live();
+    };
+    const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); if (moved) C.commit('Edit mask'); else C._txn = null; };
+    addEventListener('pointermove', mv); addEventListener('pointerup', up);
+  }
+
   function onDown(e) {
     if (e.button !== 0) return;
     const handle = e.target.dataset && e.target.dataset.h;
+    if (handle && handle.startsWith('m')) return onMaskDown(e, handle);
+    if (e.target.closest && e.target.closest('.mask-box')) return onMaskDown(e, 'mmove');
     if (handle && handle.startsWith('fx')) return onFxDown(e, handle);
     if (e.target.closest && e.target.closest('.fx-box')) return onFxDown(e, 'fxmove');
     let c = activeSelected();

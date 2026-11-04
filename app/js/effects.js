@@ -230,8 +230,75 @@
     { id: 'frame', name: 'Rounded frame', cat: 'Stylize', icon: '🔲', phase: 'shape', params: [R('radius', 'Corner radius', 0, 50, 8, 0.5, '%'), R('border', 'Border', 0, 40, 6), COL('color', 'Border color', '#ffffff')] },
     { id: 'shadow', name: 'Drop shadow', cat: 'Stylize', icon: '🌑', phase: 'composite', params: [R('blur', 'Blur', 0, 100, 30), R('distance', 'Distance', 0, 100, 15), R('angle', 'Angle', -180, 180, 45, 1, '°'), R('opacity', 'Opacity', 0, 100, 60), COL('color', 'Color', '#000000')] },
     // Overlays
-    { id: 'particles', name: 'Particles', cat: 'Overlays', icon: '❄️', params: [SEL('type', 'Type', [['snow', 'Snow'], ['rain', 'Rain'], ['confetti', 'Confetti'], ['hearts', 'Hearts'], ['sparkles', 'Sparkles'], ['bubbles', 'Bubbles'], ['fireflies', 'Fireflies'], ['bokeh', 'Bokeh'], ['emoji', 'Emoji']]), TXT('char', 'Emoji', '🎉 ⭐ 💖'), R('count', 'Amount', 5, 300, 80), R('size', 'Size', 1, 100, 30), R('speed', 'Speed', 0, 300, 100, 1, '%'), R('wind', 'Wind', -100, 100, 0), COL('color', 'Color', '#ffffff')],
+    { id: 'particles', name: 'Particles', cat: 'Overlays', icon: '❄️', params: [SEL('type', 'Type', [['snow', 'Snow'], ['rain', 'Rain'], ['confetti', 'Confetti'], ['hearts', 'Hearts'], ['sparkles', 'Sparkles'], ['bubbles', 'Bubbles'], ['fireflies', 'Fireflies'], ['bokeh', 'Bokeh'], ['fireworks', 'Fireworks'], ['stars', 'Twinkling stars'], ['embers', 'Fire embers'], ['emoji', 'Emoji']]), TXT('char', 'Emoji', '🎉 ⭐ 💖'), R('count', 'Amount', 5, 300, 80), R('size', 'Size', 1, 100, 30), R('speed', 'Speed', 0, 300, 100, 1, '%'), R('wind', 'Wind', -100, 100, 0), COL('color', 'Color', '#ffffff')],
       apply: (L, p, env) => particles(L, p, env) },
+    { id: 'lightning', name: 'Lightning', cat: 'Overlays', icon: '🌩️', params: [R('frequency', 'Strikes', 0, 100, 45), R('flash', 'Sky flash', 0, 100, 60), COL('color', 'Color', '#cfe3ff'), R('thickness', 'Thickness', 1, 20, 4)],
+      apply: (L, p, env) => {
+        const slot = Math.floor(env.T * 2.2), r0 = rnd(slot * 3.31 + env.seed);
+        if (r0 * 100 > p.frequency) return;
+        const life = (env.T * 2.2) % 1; if (life > 0.45) return;
+        const fade = life < 0.08 ? 1 : life < 0.16 ? 0.35 : life < 0.24 ? 0.9 : Math.max(0, 1 - (life - 0.24) / 0.21);
+        const cx = L.cx; reset(cx);
+        if (p.flash > 0) { cx.globalCompositeOperation = 'source-atop'; cx.globalAlpha = (p.flash / 100) * fade * 0.55; cx.fillStyle = '#e8f1ff'; cx.fillRect(0, 0, L.W, L.H); }
+        cx.globalCompositeOperation = 'lighter'; cx.globalAlpha = fade; cx.strokeStyle = p.color; cx.shadowColor = p.color; cx.shadowBlur = 25 * k1080(env); cx.lineCap = 'round'; cx.lineJoin = 'round';
+        const bolt = (x, y, ang, len, w, depth, seed) => {
+          cx.lineWidth = w; cx.beginPath(); cx.moveTo(x, y);
+          const n = 14; for (let i = 1; i <= n; i++) { const t2 = i / n; const jx = (rnd(seed + i * 7.1) - 0.5) * len * 0.18; x += Math.cos(ang) * (len / n) + jx; y += Math.sin(ang) * (len / n); cx.lineTo(x, y); if (depth < 2 && rnd(seed + i * 3.7) > 0.86) { cx.stroke(); bolt(x, y, ang + (rnd(seed + i) - 0.5) * 1.2, len * (1 - t2) * 0.6, w * 0.5, depth + 1, seed + i * 13); cx.beginPath(); cx.moveTo(x, y); cx.lineWidth = w; } }
+          cx.stroke();
+        };
+        bolt(L.W * (0.15 + rnd(slot * 5.3) * 0.7), -10, Math.PI / 2 + (rnd(slot * 2.1) - 0.5) * 0.5, L.H * (0.6 + rnd(slot) * 0.4), p.thickness * k1080(env), 0, slot * 17);
+        reset(cx);
+      } },
+    { id: 'fog', name: 'Fog & haze', cat: 'Overlays', icon: '🌁', params: [R('density', 'Density', 0, 100, 55), R('speed', 'Drift speed', 0, 100, 30), COL('color', 'Color', '#dfe6ee'), R('height', 'Low-lying', 0, 100, 40)],
+      apply: (L, p, env) => {
+        if (!FX._fog) { const c = document.createElement('canvas'); c.width = 512; c.height = 256; const x = c.getContext('2d'); for (let i = 0; i < 70; i++) { const r = 30 + rnd(i * 4.1) * 90, px = rnd(i * 1.7) * 512, py = rnd(i * 2.9) * 256; for (const dx of [-512, 0, 512]) { const g = x.createRadialGradient(px + dx, py, 0, px + dx, py, r); g.addColorStop(0, 'rgba(255,255,255,0.35)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(px + dx - r, py - r, r * 2, r * 2); } } FX._fog = c; }
+        const T = FX.canvas('fog', L.W, L.H); const t = T._cx; reset(t); t.clearRect(0, 0, L.W, L.H);
+        const sx = L.W / 512 * 1.4, off = (env.T * p.speed * 0.6) % (512 * sx);
+        for (const layer of [0, 1]) { t.globalAlpha = layer ? 0.6 : 1; const o = (off * (layer ? 0.6 : 1)) % (512 * sx); for (let k = -1; k <= 1; k++) t.drawImage(FX._fog, k * 512 * sx - o, layer * L.H * 0.2, 512 * sx, L.H * (1.1 - layer * 0.2)); }
+        t.globalCompositeOperation = 'source-in'; t.globalAlpha = 1; t.fillStyle = p.color; t.fillRect(0, 0, L.W, L.H);
+        if (p.height > 0) { t.globalCompositeOperation = 'destination-in'; const g = t.createLinearGradient(0, 0, 0, L.H); g.addColorStop(0, `rgba(0,0,0,${1 - p.height / 100})`); g.addColorStop(1, 'rgba(0,0,0,1)'); t.fillStyle = g; t.fillRect(0, 0, L.W, L.H); }
+        const cx = L.cx; reset(cx); cx.globalCompositeOperation = 'source-atop'; cx.globalAlpha = (p.density / 100) * 0.95; cx.drawImage(T, 0, 0); reset(cx);
+      } },
+    { id: 'lensFlare', name: 'Lens flare', cat: 'Light', icon: '☀️', point: true, params: [R('x', 'Center X', 0, 1, 0.78, 0.001), R('y', 'Center Y', 0, 1, 0.22, 0.001), R('intensity', 'Intensity', 0, 150, 80), COL('color', 'Tint', '#ffd9a0'), BOOL('streak', 'Anamorphic streak', true)],
+      apply: (L, p, env) => {
+        const cx = L.cx; reset(cx); cx.globalCompositeOperation = 'lighter';
+        const x = p.x * L.W, y = p.y * L.H, k = Math.max(L.W, L.H), a = p.intensity / 100;
+        let g = cx.createRadialGradient(x, y, 0, x, y, k * 0.35); g.addColorStop(0, hexA('#ffffff', 0.9 * Math.min(1, a))); g.addColorStop(0.08, hexA(p.color, 0.6 * a)); g.addColorStop(1, hexA(p.color, 0)); cx.fillStyle = g; cx.fillRect(0, 0, L.W, L.H);
+        if (p.streak) { cx.save(); cx.translate(x, y); cx.scale(1, 0.025); g = cx.createRadialGradient(0, 0, 0, 0, 0, k * 0.6); g.addColorStop(0, hexA('#cfe6ff', 0.8 * a)); g.addColorStop(1, 'rgba(120,170,255,0)'); cx.fillStyle = g; cx.beginPath(); cx.arc(0, 0, k * 0.6, 0, 6.283); cx.fill(); cx.restore(); }
+        const ox = L.W / 2 - x, oy = L.H / 2 - y;
+        [[0.4, 0.05, '#ff9a5c'], [0.7, 0.03, '#7cff9e'], [1.1, 0.08, '#7ca8ff'], [1.5, 0.04, '#ff7ce1'], [1.8, 0.11, '#ffd27c']].forEach(([d, r, col]) => { const gx = x + ox * d * 2, gy = y + oy * d * 2, rr = k * r; const gg = cx.createRadialGradient(gx, gy, rr * 0.6, gx, gy, rr); gg.addColorStop(0, hexA(col, 0.12 * a)); gg.addColorStop(0.85, hexA(col, 0.22 * a)); gg.addColorStop(1, hexA(col, 0)); cx.fillStyle = gg; cx.beginPath(); cx.arc(gx, gy, rr, 0, 6.283); cx.fill(); });
+        reset(cx);
+      } },
+    { id: 'camera', name: 'Camera overlay', cat: 'Overlays', icon: '📹', params: [SEL('style', 'Style', [['viewfinder', 'Viewfinder (REC)'], ['security', 'Security camera'], ['phone', 'Phone recording'], ['camcorder', 'Old camcorder'], ['film', 'Film strip']]), COL('color', 'Color', '#ffffff'), BOOL('grid', 'Rule-of-thirds grid', false), TXT('label', 'Label', 'CAM 01')],
+      apply: (L, p, env) => {
+        const cx = L.cx; reset(cx); const W = L.W, H = L.H, k = Math.min(W, H) / 1080, m = 60 * k, s = Math.floor(env.T);
+        const tc = `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}:${String(Math.floor((env.T % 1) * 30)).padStart(2, '0')}`;
+        cx.strokeStyle = p.color; cx.fillStyle = p.color; cx.lineWidth = 4 * k; cx.font = `600 ${36 * k}px Consolas, monospace`; cx.textBaseline = 'middle'; cx.shadowColor = 'rgba(0,0,0,.6)'; cx.shadowBlur = 6 * k;
+        const corners = () => { const l = 70 * k; [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]].forEach(([x, y, dx, dy]) => { cx.beginPath(); cx.moveTo(x, y + l * dy); cx.lineTo(x, y); cx.lineTo(x + l * dx, y); cx.stroke(); }); };
+        const blink = Math.floor(env.T * 2) % 2 === 0;
+        if (p.grid) { cx.globalAlpha = 0.35; cx.lineWidth = 1.5 * k; for (const f of [1 / 3, 2 / 3]) { cx.beginPath(); cx.moveTo(W * f, 0); cx.lineTo(W * f, H); cx.moveTo(0, H * f); cx.lineTo(W, H * f); cx.stroke(); } cx.globalAlpha = 1; cx.lineWidth = 4 * k; }
+        if (p.style === 'viewfinder') {
+          corners(); if (blink) { cx.fillStyle = '#ff2d2d'; cx.beginPath(); cx.arc(m + 40 * k, m + 50 * k, 13 * k, 0, 6.283); cx.fill(); cx.fillStyle = p.color; }
+          cx.fillText('REC', m + 65 * k, m + 50 * k); cx.textAlign = 'right'; cx.fillText(tc, W - m - 20 * k, m + 50 * k); cx.fillText('4K  60FPS', W - m - 20 * k, H - m - 45 * k); cx.textAlign = 'left';
+          cx.strokeRect(m + 30 * k, H - m - 62 * k, 70 * k, 34 * k); cx.fillRect(m + 36 * k, H - m - 56 * k, 46 * k, 22 * k); cx.fillRect(m + 100 * k, H - m - 52 * k, 6 * k, 14 * k);
+          cx.lineWidth = 2 * k; cx.beginPath(); cx.moveTo(W / 2 - 30 * k, H / 2); cx.lineTo(W / 2 + 30 * k, H / 2); cx.moveTo(W / 2, H / 2 - 30 * k); cx.lineTo(W / 2, H / 2 + 30 * k); cx.stroke();
+        } else if (p.style === 'security') {
+          cx.fillText(p.label || 'CAM 01', m, m); cx.textAlign = 'right'; const d = new Date(2026, 0, 1, 0, 0, s); cx.fillText(`${d.toISOString().slice(0, 10)}  ${tc.slice(0, 8)}`, W - m, m); cx.textAlign = 'left';
+          if (blink) { cx.fillStyle = '#ff2d2d'; cx.beginPath(); cx.arc(m + 10 * k, H - m, 10 * k, 0, 6.283); cx.fill(); cx.fillStyle = p.color; } cx.fillText('REC', m + 30 * k, H - m);
+        } else if (p.style === 'phone') {
+          cx.textAlign = 'center'; cx.fillStyle = 'rgba(0,0,0,.45)'; cx.beginPath(); cx.roundRect(W / 2 - 110 * k, m - 30 * k, 220 * k, 60 * k, 30 * k); cx.fill();
+          cx.fillStyle = '#ff3b30'; cx.beginPath(); cx.arc(W / 2 - 70 * k, m, 10 * k, 0, 6.283); cx.fill(); cx.fillStyle = '#fff'; cx.fillText(tc.slice(3, 8), W / 2 + 15 * k, m);
+          cx.lineWidth = 6 * k; cx.strokeStyle = '#fff'; cx.beginPath(); cx.arc(W / 2, H - m - 40 * k, 50 * k, 0, 6.283); cx.stroke(); cx.fillStyle = '#ff3b30'; cx.beginPath(); cx.roundRect(W / 2 - 20 * k, H - m - 60 * k, 40 * k, 40 * k, 8 * k); cx.fill(); cx.textAlign = 'left';
+        } else if (p.style === 'camcorder') {
+          cx.font = `700 ${44 * k}px "Courier New", monospace`; cx.fillText(blink ? '● REC' : '  REC', m, m); cx.fillText('SP', W - m - 70 * k, m); cx.fillText('JAN. 1 1998', m, H - m); cx.textAlign = 'right'; cx.fillText(tc.slice(0, 8), W - m, H - m); cx.textAlign = 'left';
+          cx.globalAlpha = 0.5; cx.fillRect(m, m + 50 * k, 160 * k * (0.5 + 0.5 * Math.sin(env.T)), 8 * k); cx.globalAlpha = 1;
+        } else {
+          const bw = W * 0.06; cx.shadowBlur = 0; cx.fillStyle = '#0b0b0b'; cx.fillRect(0, 0, bw, H); cx.fillRect(W - bw, 0, bw, H);
+          const hole = bw * 0.45, gap = hole * 1.9, off = (env.T * 300 * k) % gap; cx.fillStyle = '#f2efe6';
+          for (let y = -gap + off; y < H + gap; y += gap) { cx.beginPath(); cx.roundRect(bw / 2 - hole / 2, y, hole, hole * 0.75, hole * 0.15); cx.fill(); cx.beginPath(); cx.roundRect(W - bw / 2 - hole / 2, y, hole, hole * 0.75, hole * 0.15); cx.fill(); }
+        }
+        reset(cx);
+      } },
     // Keying
     { id: 'chromaKey', name: 'Green screen (chroma key)', cat: 'Keying', icon: '🟩', params: [COL('color', 'Key color', '#00ff00'), R('similarity', 'Similarity', 0, 100, 40), R('smoothness', 'Smoothness', 0, 100, 10), R('spill', 'Spill removal', 0, 100, 50)],
       apply: (L, p) => chromaKey(L, p) },
@@ -322,6 +389,19 @@
           const g = cx.createRadialGradient(x, y, rr * 0.6, x, y, rr); g.addColorStop(0, hexA(CONFETTI[i % CONFETTI.length], 0.22)); g.addColorStop(1, hexA(CONFETTI[i % CONFETTI.length], 0));
           cx.globalCompositeOperation = 'screen'; cx.globalAlpha = 1; cx.fillStyle = g; cx.beginPath(); cx.arc(x, y, rr, 0, 6.283); cx.fill(); cx.globalCompositeOperation = 'source-over'; break;
         }
+        case 'fireworks': {
+          if (i >= 10) break;
+          const per = 2.2 / Math.max(0.2, sp), ph = (t + r1 * per) % per, life = ph / (per * 0.7);
+          const burst = Math.floor((t + r1 * per) / per);
+          const bx = (0.15 + rnd(i * 9.1 + burst) * 0.7) * W, by = (0.15 + rnd(i * 4.3 + burst) * 0.4) * H; const col = CONFETTI[(i + burst) % CONFETTI.length];
+          if (life < 0.25) { const k2 = life / 0.25; cx.globalAlpha = 0.9; cx.fillStyle = '#fff6d0'; cx.beginPath(); cx.arc(bx, H - (H - by) * k2, base * 0.08, 0, 6.283); cx.fill(); break; }
+          if (life > 1) break;
+          const k2 = (life - 0.25) / 0.75, nn = 26;
+          for (let j = 0; j < nn; j++) { const a = (j / nn) * 6.283 + rnd(i + j), r = base * 4 * C.ease.out(k2) * (0.7 + rnd(j * 3 + i) * 0.5); cx.globalAlpha = (1 - k2) * 0.95; cx.fillStyle = col; cx.beginPath(); cx.arc(bx + Math.cos(a) * r, by + Math.sin(a) * r + k2 * k2 * base * 1.5, base * 0.07 * (1 - k2 * 0.5), 0, 6.283); cx.fill(); }
+          break;
+        }
+        case 'stars': { x = r1 * W; y = r2 * H; const tw = 0.3 + 0.7 * Math.max(0, Math.sin(t * (1 + r3 * 3) * sp * 2 + i)); cx.globalAlpha = tw; cx.fillStyle = p.color; cx.beginPath(); cx.arc(x, y, s * 0.06 * (0.5 + r4), 0, 6.283); cx.fill(); break; }
+        case 'embers': { const life = wrap(r2 + t * v * 0.12, 1); y = H * (1.05 - life * 1.1); x = wrap(r1 * W + Math.sin(t * 2 + i * 3) * s * 0.8 + p.wind * life * W * 0.003, W); cx.globalAlpha = Math.sin(life * Math.PI); const g2 = cx.createRadialGradient(x, y, 0, x, y, s * 0.18); g2.addColorStop(0, '#fff3b0'); g2.addColorStop(0.4, '#ff8a1f'); g2.addColorStop(1, 'rgba(255,60,0,0)'); cx.fillStyle = g2; cx.fillRect(x - s * 0.2, y - s * 0.2, s * 0.4, s * 0.4); break; }
         default: { // emoji
           y = wrap(r2 * (H + 2 * s) + t * v * H * 0.25, H + 2 * s) - s; x = wrap(r1 * W + Math.sin(t * 1.4 + i) * s * 0.8 + p.wind * t * W * 0.002, W);
           cx.save(); cx.translate(x, y); cx.rotate(Math.sin(t * 2 + i) * 0.3); cx.globalAlpha = 1; cx.font = `${s}px "Segoe UI Emoji","Noto Color Emoji",sans-serif`; cx.textAlign = 'center'; cx.textBaseline = 'middle';
@@ -415,6 +495,40 @@
     { id: 'bp_snow', name: 'Snow day', builtin: true, effects: [mk('tint', { color: '#7fb8ff', amount: 25, mode: 'soft-light' }), mk('particles', { type: 'snow', count: 160, size: 35, speed: 70 })] },
     { id: 'bp_party', name: 'Party time', builtin: true, effects: [mk('particles', { type: 'confetti', count: 120, size: 40 }), mk('lightLeak', { color1: '#ff2e88', color2: '#7c5cff', intensity: 45, speed: 4 })] },
     { id: 'bp_love', name: 'Lovestruck', builtin: true, effects: [mk('tint', { color: '#ff6b9a', amount: 30, mode: 'soft-light' }), mk('particles', { type: 'hearts', count: 40, size: 45, color: '#ff4d7d' }), mk('glow', { intensity: 40 })] },
+  ];
+
+  // ---------- overlay templates (Overlays panel) ----------
+  FX.OVERLAYS = [
+    ['Weather', [
+      { id: 'ov_rain', name: 'Rain', icon: '🌧️', effects: [mk('particles', { type: 'rain', count: 220, size: 40, speed: 120, wind: 15, color: '#cfd8e6' }), mk('tint', { color: '#5b7da8', amount: 20, mode: 'soft-light' })] },
+      { id: 'ov_storm', name: 'Thunderstorm', icon: '⛈️', effects: [mk('particles', { type: 'rain', count: 300, size: 45, speed: 160, wind: 35, color: '#d6deeb' }), mk('lightning', { frequency: 55 }), mk('tint', { color: '#2b3a55', amount: 35, mode: 'multiply' })] },
+      { id: 'ov_snow', name: 'Snowfall', icon: '🌨️', effects: [mk('particles', { type: 'snow', count: 180, size: 40, speed: 60 })] },
+      { id: 'ov_blizzard', name: 'Blizzard', icon: '❄️', effects: [mk('particles', { type: 'snow', count: 300, size: 50, speed: 220, wind: 80 }), mk('fog', { density: 45, speed: 70, height: 0 })] },
+      { id: 'ov_fog', name: 'Morning fog', icon: '🌫️', effects: [mk('fog', { density: 60 })] },
+      { id: 'ov_lightning', name: 'Lightning', icon: '🌩️', effects: [mk('lightning', { frequency: 70 })] },
+    ]],
+    ['Camera', [
+      { id: 'ov_rec', name: 'Viewfinder REC', icon: '🎥', effects: [mk('camera', { style: 'viewfinder' })] },
+      { id: 'ov_sec', name: 'Security cam', icon: '📹', effects: [mk('camera', { style: 'security' }), mk('ink', { contrast: 140 }), mk('grain', { amount: 45 }), mk('scanlines', { opacity: 25 })] },
+      { id: 'ov_phone', name: 'Phone recording', icon: '📱', effects: [mk('camera', { style: 'phone' })] },
+      { id: 'ov_camcorder', name: '90s camcorder', icon: '📼', effects: [mk('camera', { style: 'camcorder' }), mk('vhs', { amount: 55, label: false })] },
+      { id: 'ov_film', name: 'Film strip', icon: '🎞️', effects: [mk('camera', { style: 'film' }), mk('oldFilm', { amount: 50 })] },
+      { id: 'ov_grid', name: 'Framing grid', icon: '#️⃣', effects: [mk('camera', { style: 'viewfinder', grid: true })] },
+    ]],
+    ['Light', [
+      { id: 'ov_flare', name: 'Lens flare', icon: '☀️', effects: [mk('lensFlare')] },
+      { id: 'ov_leak', name: 'Light leaks', icon: '🌅', effects: [mk('lightLeak', { intensity: 70, speed: 3 })] },
+      { id: 'ov_bokeh', name: 'Bokeh lights', icon: '✨', effects: [mk('particles', { type: 'bokeh', count: 40, size: 70, speed: 40 })] },
+      { id: 'ov_stars', name: 'Starry sky', icon: '🌌', effects: [mk('particles', { type: 'stars', count: 220, size: 30 })] },
+      { id: 'ov_fireflies', name: 'Fireflies', icon: '🪲', effects: [mk('particles', { type: 'fireflies', count: 50, size: 40 })] },
+    ]],
+    ['Party', [
+      { id: 'ov_confetti', name: 'Confetti', icon: '🎊', effects: [mk('particles', { type: 'confetti', count: 160, size: 45 })] },
+      { id: 'ov_fireworks', name: 'Fireworks', icon: '🎆', effects: [mk('particles', { type: 'fireworks', count: 10, size: 60, speed: 100 })] },
+      { id: 'ov_hearts', name: 'Floating hearts', icon: '💕', effects: [mk('particles', { type: 'hearts', count: 40, size: 50, color: '#ff4d7d' })] },
+      { id: 'ov_emoji', name: 'Emoji rain', icon: '🎉', effects: [mk('particles', { type: 'emoji', char: '🎉 😂 🔥 💯 ⭐', count: 60, size: 55 })] },
+      { id: 'ov_embers', name: 'Fire embers', icon: '🔥', effects: [mk('particles', { type: 'embers', count: 80, size: 40, speed: 80 })] },
+    ]],
   ];
 
   // ---------- thumbnails ----------

@@ -60,7 +60,7 @@
   L.show = (name) => { const b = C.$(`.rail-btn[data-panel="${name}"]`); if (b) b.click(); };
   L.render = () => {
     panel.innerHTML = '';
-    ({ media: renderMedia, text: renderText, transitions: renderTransitions, filters: renderFilters, elements: renderElements, effects: renderEffects, stickers: renderStickers })[current]();
+    ({ media: renderMedia, text: renderText, transitions: renderTransitions, filters: renderFilters, elements: renderElements, effects: renderEffects, stickers: renderStickers, overlays: renderOverlays })[current]();
     C.fillIcons(panel);
   };
 
@@ -327,8 +327,37 @@
     fill();
   }
 
+  function renderOverlays() {
+    panel.appendChild(C.h('<h3>Overlays</h3>'));
+    panel.appendChild(C.h('<p class="hint" style="margin:-4px 2px 10px">Click or drag onto the timeline. Each overlay is an effect clip on its own track — stretch it to any length, and tweak or keyframe it in the inspector.</p>'));
+    for (const [cat, list] of C.fx.OVERLAYS) {
+      panel.appendChild(C.h(`<h4>${cat}</h4>`));
+      const g = C.h('<div class="card-grid"></div>');
+      list.forEach((o) => {
+        const effects = C.presets.instantiate(o).effects;
+        const cd = C.h(`<div class="card fx-pick" draggable="true"><div class="card-art"><img alt=""><span class="fx-badge">${o.icon}</span></div><div class="card-label">${C.esc(o.name)}</div></div>`);
+        const img = cd.querySelector('img'); C.presets.queueThumb(img, effects, 'ov:' + o.id); C.presets.hoverAnimate(cd, img, effects);
+        cd.onclick = () => C.presets.applyRef('ov:' + o.id, []);
+        cd.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-cutroom-effect', 'ov:' + o.id));
+        g.appendChild(cd);
+      });
+      panel.appendChild(g);
+    }
+  }
+
   function renderElements() {
     panel.appendChild(C.h('<h3>Elements</h3>'));
+    panel.appendChild(C.h('<h4>Shapes</h4>'));
+    const sg = C.h('<div class="card-grid" style="grid-template-columns:repeat(4,1fr)"></div>');
+    C.geo.SHAPES.forEach(([k, l]) => {
+      const cv = document.createElement('canvas'); cv.width = 80; cv.height = 80; const x = cv.getContext('2d'); x.translate(40, 40);
+      const sh = C.defaultShape(k); const sc = 52 / Math.max(sh.w, sh.h || 1); C.geo.shapePath(x, { kind: k, w: sh.w * sc, h: (sh.h || 0) * sc, radius: sh.radius, points: sh.points, inner: sh.inner });
+      if (k === 'line') { x.strokeStyle = '#19d3c5'; x.lineWidth = 5; x.lineCap = 'round'; x.stroke(); } else { const g = x.createLinearGradient(-30, -30, 30, 30); g.addColorStop(0, '#19d3c5'); g.addColorStop(1, '#7c5cff'); x.fillStyle = g; x.fill(k === 'ring' ? 'evenodd' : 'nonzero'); }
+      const card = C.h(`<div class="card" data-tip="Add ${l}"><div class="card-art" style="height:62px"><img src="${cv.toDataURL()}" style="width:46px;height:46px"></div></div>`);
+      card.onclick = () => C.act('Add shape', () => { const c = C.ops.addShape(k); C.select([c.id]); C.emit('inspectTab', 'shape'); });
+      sg.appendChild(card);
+    });
+    panel.appendChild(sg);
     panel.appendChild(C.h('<h4>Solid colors</h4>'));
     const grid = C.h('<div class="card-grid" style="grid-template-columns:repeat(4,1fr)"></div>');
     COLORS.forEach((col) => {

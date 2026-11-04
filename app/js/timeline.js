@@ -120,7 +120,7 @@
     const r = m && C.MR[m.id];
     const sel = C.selection.has(c.id);
     const label = c.kind === 'text' ? (c.text.content.split('\n')[0] || 'Text') : c.name;
-    const icon = { video: 'film', image: 'image', audio: 'music', text: c.sticker ? 'smile' : 'text', color: 'square', effect: 'sparkles' }[c.kind];
+    const icon = { video: 'film', image: 'image', audio: 'music', text: c.sticker ? 'smile' : 'text', color: 'square', effect: 'sparkles', shape: 'shapes' }[c.kind];
     const status = r && r.status !== 'ready' ? `<span class="tag">${r.status === 'missing' ? 'MISSING' : r.status === 'error' ? 'ERROR' : '…'}</span>` : '';
     const el = C.h(`<div class="clip kind-${c.kind} ${sel ? 'selected' : ''} ${c.muted ? 'muted-clip' : ''}" data-clip="${c.id}" style="left:${c.start * pps}px;width:${w}px">
       ${c.label ? `<div class="label-bar" style="background:${c.label}"></div>` : ''}
@@ -887,6 +887,12 @@
     const c = O.addText({ text: { content: emoji, size: 220, font: 'Segoe UI Emoji', bold: false, shadow: 0.25, strokeWidth: 0 }, anim: { in: 'pop', out: 'pop', dur: 0.35 } }, t, trackId);
     c.sticker = true; c.name = 'Sticker';
     return c;
+  };
+  O.addShape = (kind, t = C.UI.playhead, trackId = null) => {
+    const c = C.makeClip({ kind: 'shape', name: (C.geo.SHAPES.find((s) => s[0] === kind) || ['', 'Shape'])[1], start: C.snapTime(t), duration: 5, shape: C.defaultShape(kind), anim: { in: 'pop', out: 'fade', dur: 0.4 } });
+    c.trackId = C.findSpace('video', c.start, c.duration, trackId);
+    if (C.clipsOn(c.trackId).some((x) => x.kind === 'video')) { const top = C.tracks().filter((x) => x.type === 'video' && !C.overlaps(x.id, c.start, c.start + c.duration) && C.clipsOn(x.id).every((k) => k.kind !== 'video'))[0]; c.trackId = top ? top.id : (C.addTrack('video', 0), C.renumberTracks(), C.tracks()[0].id); }
+    C.project.clips[c.id] = c; return c;
   };
   O.addEffectClip = (effects, t = C.UI.playhead, trackId = null, name = 'Effect', kf = null) => {
     const c = C.makeClip({ kind: 'effect', name, start: C.snapTime(t), duration: 5, effects });

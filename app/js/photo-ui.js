@@ -1,13 +1,13 @@
 /* Cutroom Photo — workspace view & tools */
 (function (C) {
   const P = C.photo;
-  const PU = (C.photoUI = { tool: 'move', view: { z: 1, ox: 0, oy: 0 }, ready: false });
+  const PU = (C.photoUI = { tool: 'move', view: { z: 1, ox: 0, oy: 0 }, ready: false, overlayHooks: [], optionHooks: [], moveHooks: [] });
   PU.TOOLS = [
-    ['move', 'move', 'V', 'Move & transform'], ['marquee', 'marquee', 'M', 'Marquee select'], ['lasso', 'lasso', 'L', 'Lasso select'], ['wand', 'wand', 'W', 'Magic wand'],
+    ['move', 'move', 'V', 'Move & transform'], ['marquee', 'marquee', 'M', 'Marquee select'], ['lasso', 'lasso', 'L', 'Lasso / polygonal lasso'], ['wand', 'wand', 'W', 'Magic wand'], ['quick', 'sparkles', 'K', 'Quick selection brush'],
     ['crop', 'crop', 'C', 'Crop'], ['eyedropper', 'eyedrop', 'I', 'Eyedropper'], '-',
-    ['brush', 'brush', 'B', 'Brush'], ['eraser', 'eraser', 'E', 'Eraser'], ['clone', 'stamp', 'S', 'Clone stamp (Alt+click to set source)'], ['retouch', 'droplet', 'O', 'Dodge / burn / blur / sharpen / sponge'],
-    ['bucket', 'bucket', 'G', 'Paint bucket'], ['gradient', 'gradient', 'Q', 'Gradient'], '-',
-    ['text', 'text', 'T', 'Text'], ['shape', 'shapes', 'U', 'Shapes'], '-', ['hand', 'hand', 'H', 'Hand (or hold Space)'], ['zoom', 'zoomIn', 'Z', 'Zoom (Alt to zoom out)'],
+    ['brush', 'brush', 'B', 'Brush'], ['eraser', 'eraser', 'E', 'Eraser'], ['clone', 'stamp', 'S', 'Clone stamp (Alt+click to set source)'], ['heal', 'heal', 'J', 'Healing brush / spot healing'], ['smudge', 'smudge', 'R', 'Smudge'], ['retouch', 'droplet', 'O', 'Dodge / burn / blur / sharpen / sponge'],
+    ['bucket', 'bucket', 'G', 'Paint bucket'], ['gradient', 'gradient', 'G', 'Gradient'], '-',
+    ['pen', 'pen', 'P', 'Pen tool (paths → selection, shape or mask)'], ['text', 'text', 'T', 'Text'], ['shape', 'shapes', 'U', 'Shapes'], '-', ['hand', 'hand', 'H', 'Hand (or hold Space)'], ['zoom', 'zoomIn', 'Z', 'Zoom (Alt to zoom out)'],
   ];
   PU.opts = {
     move: { auto: true }, marquee: { shape: 'rect', mode: 'new', feather: 0 }, lasso: { mode: 'new', feather: 0, poly: false },
@@ -16,6 +16,7 @@
     clone: { size: 60, hardness: 50, opacity: 100, flow: 100 }, retouch: { mode: 'dodge', size: 70, hardness: 30, strength: 40 },
     bucket: { tol: 32, contiguous: true, all: false, opacity: 100 }, gradient: { type: 'linear', mode: 'fgbg', opacity: 100 },
     text: {}, shape: { kind: 'rect' },
+    quick: { size: 40, tol: 30 }, heal: { size: 50, hardness: 50, opacity: 100, flow: 100, spot: true }, smudge: { size: 40, hardness: 40, strength: 55 }, pen: { mode: 'new', feather: 0 },
   };
   try { Object.assign(PU.opts, JSON.parse(localStorage.getItem('cutroom.photoOpts') || '{}')); } catch (_) {}
   const saveOpts = C.debounce(() => { try { localStorage.setItem('cutroom.photoOpts', JSON.stringify(PU.opts)); } catch (_) {} }, 400);
@@ -117,7 +118,8 @@
     // drag previews
     if (drag && drag.preview) drag.preview(ox);
     // brush cursor
-    if (hover && ['brush', 'eraser', 'clone', 'retouch'].includes(PU.tool)) {
+    for (const fn of PU.overlayHooks) { try { fn(ox, W, H); } catch (e) { console.warn(e); } }
+    if (hover && ['brush', 'eraser', 'clone', 'retouch', 'heal', 'smudge', 'quick'].includes(PU.tool)) {
       const o = PU.opts[PU.tool]; const [hx, hy] = toScr(hover.x, hover.y); const r = Math.max(2, (o.size / 2) * z);
       ox.strokeStyle = 'rgba(0,0,0,.7)'; ox.lineWidth = 3; ox.beginPath(); ox.arc(hx, hy, r, 0, 6.283); ox.stroke();
       ox.strokeStyle = '#fff'; ox.lineWidth = 1; ox.beginPath(); ox.arc(hx, hy, r, 0, 6.283); ox.stroke();
@@ -148,7 +150,9 @@
     PU.tool = t; C.$$('.ph-tool').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
     if (t === 'crop' && P.doc) cropRect = { x: 0, y: 0, w: P.doc.w, h: P.doc.h };
     view.style.cursor = { hand: 'grab', zoom: 'zoom-in', eyedropper: 'crosshair', text: 'text', move: 'default' }[t] || 'crosshair';
-    if (['brush', 'eraser', 'clone', 'retouch'].includes(t)) view.style.cursor = 'none';
+    if (['brush', 'eraser', 'clone', 'retouch', 'heal', 'smudge', 'quick'].includes(t)) view.style.cursor = 'none';
+    if (t === 'pen') view.style.cursor = 'crosshair';
+    C.emit('photo:tool', t);
     PU.renderOptions(); PU.redraw(); updateStatus();
   };
   const optRow = (html) => C.h(`<div class="ph-opt">${html}</div>`);
@@ -162,12 +166,16 @@
     const chk = (key, label) => { const r = optRow(`<label class="ph-chk"><input type="checkbox" ${o[key] ? 'checked' : ''}> ${label}</label>`); r.querySelector('input').onchange = (e) => { o[key] = e.target.checked; saveOpts(); }; bar.appendChild(r); };
     const modes = [['new', 'New'], ['add', 'Add (Shift)'], ['subtract', 'Subtract (Alt)'], ['intersect', 'Intersect']];
     if (t === 'brush' || t === 'eraser' || t === 'clone') { range('size', 'Size', 1, 500, 'px'); range('hardness', 'Hardness', 0, 100, '%'); range('opacity', 'Opacity', 1, 100, '%'); range('flow', 'Flow', 1, 100, '%'); }
+    if (t === 'heal') { range('size', 'Size', 1, 400, 'px'); range('hardness', 'Hardness', 0, 100, '%'); chk('spot', 'Spot healing (automatic source)'); bar.appendChild(optRow(`<span class="hint">${PU.opts.heal.spot ? 'Paint over blemishes — Cutroom finds matching texture nearby' : cloneSrc ? 'Source set — paint to heal' : 'Alt+click to set the source point'}</span>`)); }
+    if (t === 'smudge') { range('size', 'Size', 1, 300, 'px'); range('hardness', 'Hardness', 0, 100, '%'); range('strength', 'Strength', 1, 100, '%'); }
+    if (t === 'quick') { range('size', 'Brush size', 4, 300, 'px'); range('tol', 'Sensitivity', 4, 120); bar.appendChild(optRow('<span class="hint">Paint over what you want selected · Alt to subtract</span>')); }
     if (t === 'clone') bar.appendChild(optRow(`<span class="hint">${cloneSrc ? 'Source set — paint to clone' : 'Alt+click to set the source point'}</span>`));
     if (t === 'retouch') { sel('mode', 'Mode', [['dodge', 'Dodge (lighten)'], ['burn', 'Burn (darken)'], ['blur', 'Blur'], ['sharpen', 'Sharpen'], ['sponge', 'Sponge (desaturate)'], ['saturate', 'Saturate']]); range('size', 'Size', 2, 500, 'px'); range('hardness', 'Hardness', 0, 100, '%'); range('strength', 'Strength', 1, 100, '%'); }
     if (t === 'bucket') { range('tol', 'Tolerance', 0, 255); range('opacity', 'Opacity', 1, 100, '%'); chk('contiguous', 'Contiguous'); chk('all', 'Sample all layers'); }
     if (t === 'wand') { range('tol', 'Tolerance', 0, 255); chk('contiguous', 'Contiguous'); chk('all', 'Sample all layers'); sel('mode', 'Mode', modes); }
     if (t === 'marquee') { sel('shape', 'Shape', [['rect', 'Rectangle'], ['ellipse', 'Ellipse']]); sel('mode', 'Mode', modes); range('feather', 'Feather', 0, 100, 'px'); }
-    if (t === 'lasso') { sel('mode', 'Mode', modes); range('feather', 'Feather', 0, 100, 'px'); }
+    if (t === 'lasso') { chk('poly', 'Polygonal (click points)'); sel('mode', 'Mode', modes); range('feather', 'Feather', 0, 100, 'px'); }
+    for (const fn of PU.optionHooks) fn(t, bar, { range, sel, chk, optRow });
     if (t === 'gradient') { sel('type', 'Type', [['linear', 'Linear'], ['radial', 'Radial']]); sel('mode', 'Colors', [['fgbg', 'Foreground → background'], ['fgtrans', 'Foreground → transparent']]); range('opacity', 'Opacity', 1, 100, '%'); }
     if (t === 'shape') sel('kind', 'Shape', [['rect', 'Rectangle'], ['rounded', 'Rounded rectangle'], ['ellipse', 'Ellipse'], ['star', 'Star'], ['polygon', 'Polygon'], ['heart', 'Heart'], ['arrow', 'Arrow'], ['line', 'Line']]);
     if (t === 'move') { chk('auto', 'Auto-select layer'); bar.appendChild(optRow('<span class="hint">Drag corners to scale (Shift = free), top handle to rotate · arrow keys nudge</span>')); }
@@ -265,7 +273,7 @@
       if (PU.opts.move.auto) { const hit = layerAt(p); if (hit && hit !== L) { P.doc.active = hit.id; L = hit; C.emit('photo:change', { structural: true }); } }
       if (!L || L.locked || L.type === 'adjust' || L.type === 'fill') return null;
       const x0 = L.x, y0 = L.y; P.begin('Move layer'); let moved = false;
-      return { move: (m, q) => { moved = true; L.x = Math.round(x0 + q.x - p.x); L.y = Math.round(y0 + q.y - p.y); P.changed(); }, up: () => { if (moved) P.commit('Move layer'); else P._txn = null; } };
+      return { move: (m, q) => { moved = true; L.x = Math.round(x0 + q.x - p.x); L.y = Math.round(y0 + q.y - p.y); for (const fn of PU.moveHooks) fn(L, m); P.changed(); }, up: () => { PU._guides = null; if (moved) P.commit('Move layer'); else P._txn = null; } };
     },
     marquee: (e, p) => {
       const o = PU.opts.marquee; const mode = selMode(e, o.mode); let q = p;
@@ -278,7 +286,8 @@
       };
     },
     lasso: (e, p) => {
-      const o = PU.opts.lasso; const mode = selMode(e, o.mode); const pts = [[p.x, p.y]];
+      const o = PU.opts.lasso;
+      if (o.poly && PU.polyLasso) return PU.polyLasso(e, p); const mode = selMode(e, o.mode); const pts = [[p.x, p.y]];
       return {
         move: (m, q) => pts.push([q.x, q.y]),
         preview: (c) => { c.strokeStyle = '#fff'; c.lineWidth = 1.2; c.setLineDash([5, 4]); c.beginPath(); pts.forEach(([x, y], i) => { const [sx, sy] = toScr(x, y); i ? c.lineTo(sx, sy) : c.moveTo(sx, sy); }); c.stroke(); c.setLineDash([]); },
@@ -308,6 +317,8 @@
         cropRect = r;
       } };
     },
+    heal: (e, p) => { if (e.altKey) { cloneSrc = { x: p.x, y: p.y }; PU.renderOptions(); C.toast('Healing source set', 'info', 1200); return null; } if (!PU.opts.heal.spot && !cloneSrc) { C.toast('Alt+click to set a source, or turn on Spot healing', 'info'); return null; } return stroke(e, p, 'heal'); },
+    smudge: (e, p) => stroke(e, p, 'smudge'),
     brush: (e, p) => stroke(e, p, 'brush'), eraser: (e, p) => stroke(e, p, 'eraser'), clone: (e, p) => { if (e.altKey) { cloneSrc = { x: p.x, y: p.y }; PU.renderOptions(); C.toast('Clone source set', 'info', 1200); return null; } if (!cloneSrc) { C.toast('Alt+click to set a clone source first', 'info'); return null; } return stroke(e, p, 'clone'); },
     retouch: (e, p) => stroke(e, p, 'retouch'),
     bucket: (e, p) => {
@@ -361,67 +372,129 @@
 
   // ---------- painting strokes ----------
   function stroke(e, p, kind) {
-    let L = needLayer(); if (!L) return null;
     const o = PU.opts[kind];
+    if (P.ui.quickMask && (kind === 'brush' || kind === 'eraser')) return selStroke(p, kind, o);
+    let L = needLayer(); if (!L) return null;
     const onMask = P.ui.editMask === L.id && L.mask;
     if (!onMask && L.type !== 'raster') {
       if (L.type === 'adjust' || L.type === 'fill') { C.toast('Add a mask to paint on this layer, or select a pixel layer', 'info'); return null; }
       C.toast(`${L.type === 'text' ? 'Text' : 'Shape'} layer converted to pixels so you can paint on it`, 'info', 2200);
     }
-    P.begin(kind === 'eraser' ? 'Eraser' : kind === 'clone' ? 'Clone stamp' : kind === 'retouch' ? 'Retouch: ' + o.mode : 'Brush');
+    P.begin({ eraser: 'Eraser', clone: 'Clone stamp', retouch: 'Retouch: ' + (o.mode || ''), heal: 'Healing brush', smudge: 'Smudge' }[kind] || 'Brush');
     if (!onMask) { if (L.type !== 'raster') P.rasterize(L); P.prepPaint(L); }
     const target = onMask ? 'mask' : 'canvas';
     const base = onMask ? L.mask : L.canvas;
     const offX = onMask ? 0 : L.x, offY = onMask ? 0 : L.y;
-    const sc = P.mk(base.width, base.height); const sx = sc.getContext('2d');
     let mode = 'paint', color = P.fg;
     if (onMask) {
       const n = parseInt(P.fg.slice(1), 16); const luma = (((n >> 16) & 255) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) / 255;
       if (kind === 'eraser' || luma < 0.5) { mode = 'erase'; color = '#000000'; } else color = '#ffffff';
     } else if (kind === 'eraser') { mode = 'erase'; color = '#000000'; }
-    let processed = null;
-    if (kind === 'retouch') {
-      const f = { dodge: 'brightness(1.35)', burn: 'brightness(0.65)', blur: `blur(${Math.max(2, o.size / 12)}px)`, sharpen: 'url(#cr-sharpen) url(#cr-sharpen)', sponge: 'saturate(0.2)', saturate: 'saturate(1.9)' }[o.mode];
-      processed = P.mk(base.width, base.height); const px = processed.getContext('2d'); px.filter = f; px.drawImage(base, 0, 0); px.filter = 'none'; mode = 'atop';
-    }
-    const cloneOff = kind === 'clone' ? { x: cloneSrc.x - p.x, y: cloneSrc.y - p.y } : null;
-    const snapshot = kind === 'clone' ? P.clone(P.composite()) : null;
-    L._stroke = { cv: sc, opacity: kind === 'retouch' ? o.strength / 100 : o.opacity / 100, mode, target };
-    const size = o.size, spacing = Math.max(1, size * 0.12);
-    const dabImg = P.dab(size, o.hardness, color);
-    const dabTmp = P.mk(dabImg.width, dabImg.height); const dt = dabTmp.getContext('2d');
+    const size = o.size, spacing = Math.max(1, size * (kind === 'smudge' ? 0.08 : 0.12));
+    const dabImg = P.dab(size, o.hardness ?? 50, kind === 'brush' || kind === 'eraser' ? color : '#000000');
+    const D = dabImg.width;
+    const dabTmp = P.mk(D, D); const dt = dabTmp.getContext('2d', { willReadFrequently: kind === 'heal' });
     let last = { x: p.x, y: p.y };
-    const put = (x, y) => {
-      const lx = x - offX - dabImg.width / 2, ly = y - offY - dabImg.height / 2;
-      sx.globalAlpha = (o.flow ?? 100) / 100;
-      if (kind === 'clone' || kind === 'retouch') {
-        dt.globalCompositeOperation = 'source-over'; dt.clearRect(0, 0, dabTmp.width, dabTmp.height);
-        if (kind === 'clone') dt.drawImage(snapshot, -(x + cloneOff.x - dabImg.width / 2), -(y + cloneOff.y - dabImg.height / 2));
-        else dt.drawImage(processed, -lx, -ly);
+    let sc, sx, put;
+    if (kind === 'smudge') {
+      sc = P.clone(base); sx = sc.getContext('2d');
+      L._stroke = { cv: sc, opacity: 1, mode: 'replace', target };
+      let prev = { x: p.x, y: p.y };
+      put = (x, y) => {
+        dt.globalCompositeOperation = 'source-over'; dt.clearRect(0, 0, D, D);
+        dt.drawImage(sc, -(prev.x - offX - D / 2), -(prev.y - offY - D / 2));
         dt.globalCompositeOperation = 'destination-in'; dt.drawImage(dabImg, 0, 0);
-        sx.drawImage(dabTmp, lx, ly);
-      } else sx.drawImage(dabImg, lx, ly);
-    };
+        sx.globalAlpha = o.strength / 100; sx.drawImage(dabTmp, x - offX - D / 2, y - offY - D / 2); sx.globalAlpha = 1;
+        prev = { x, y };
+      };
+    } else {
+      sc = P.mk(base.width, base.height); sx = sc.getContext('2d');
+      let processed = null;
+      if (kind === 'retouch') {
+        const f = { dodge: 'brightness(1.35)', burn: 'brightness(0.65)', blur: `blur(${Math.max(2, o.size / 12)}px)`, sharpen: 'url(#cr-sharpen) url(#cr-sharpen)', sponge: 'saturate(0.2)', saturate: 'saturate(1.9)' }[o.mode];
+        processed = P.mk(base.width, base.height); const px = processed.getContext('2d'); px.filter = f; px.drawImage(base, 0, 0); px.filter = 'none'; mode = 'atop';
+      }
+      const cloneOff = kind === 'clone' ? { x: cloneSrc.x - p.x, y: cloneSrc.y - p.y } : null;
+      const snapshot = kind === 'clone' ? P.clone(P.composite()) : null;
+      let heal = null;
+      if (kind === 'heal') {
+        const bx = base.getContext('2d', { willReadFrequently: true });
+        const blurred = P.mk(base.width, base.height); const bl = blurred.getContext('2d', { willReadFrequently: true }); bl.filter = `blur(${Math.max(2, size / 6)}px)`; bl.drawImage(base, 0, 0); bl.filter = 'none';
+        let off;
+        if (o.spot || !cloneSrc) {
+          const mean = (x, y) => { const d = bl.getImageData(Math.round(x - offX), Math.round(y - offY), 1, 1).data; return [d[0], d[1], d[2], d[3]]; };
+          const ring = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => { const a = (i / 8) * Math.PI * 2; return mean(p.x + Math.cos(a) * size * 0.7, p.y + Math.sin(a) * size * 0.7); });
+          const target2 = ring.reduce((acc, v) => acc.map((x, j) => x + v[j] / 8), [0, 0, 0, 0]);
+          let best = null, bd = Infinity;
+          for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; for (const dist of [1.25, 1.8]) { const ox = Math.cos(a) * size * dist, oy = Math.sin(a) * size * dist; const sx2 = p.x + ox - offX, sy2 = p.y + oy - offY; if (sx2 < size || sy2 < size || sx2 > base.width - size || sy2 > base.height - size) continue; const m = mean(p.x + ox, p.y + oy); const d = Math.abs(m[0] - target2[0]) + Math.abs(m[1] - target2[1]) + Math.abs(m[2] - target2[2]) + Math.abs(m[3] - target2[3]); if (d < bd) { bd = d; best = { x: ox, y: oy }; } } }
+          off = best || { x: size * 1.3, y: 0 };
+        } else off = { x: cloneSrc.x - p.x, y: cloneSrc.y - p.y };
+        heal = { bx, bl, off };
+      }
+      L._stroke = { cv: sc, opacity: kind === 'retouch' ? o.strength / 100 : (o.opacity ?? 100) / 100, mode, target };
+      put = (x, y) => {
+        const lx = x - offX - D / 2, ly = y - offY - D / 2;
+        sx.globalAlpha = (o.flow ?? 100) / 100;
+        if (kind === 'heal') {
+          const rx = Math.round(lx), ry = Math.round(ly), qx = Math.round(lx + heal.off.x), qy = Math.round(ly + heal.off.y);
+          const S = heal.bx.getImageData(qx, qy, D, D).data, Sb = heal.bl.getImageData(qx, qy, D, D).data, Db = heal.bl.getImageData(rx, ry, D, D).data, Dd = heal.bx.getImageData(rx, ry, D, D).data;
+          const out = dt.createImageData(D, D), od = out.data;
+          for (let i = 0; i < od.length; i += 4) { od[i] = S[i] - Sb[i] + Db[i]; od[i + 1] = S[i + 1] - Sb[i + 1] + Db[i + 1]; od[i + 2] = S[i + 2] - Sb[i + 2] + Db[i + 2]; od[i + 3] = Dd[i + 3]; }
+          dt.globalCompositeOperation = 'source-over'; dt.putImageData(out, 0, 0);
+          dt.globalCompositeOperation = 'destination-in'; dt.drawImage(dabImg, 0, 0);
+          sx.drawImage(dabTmp, rx, ry);
+        } else if (kind === 'clone' || kind === 'retouch') {
+          dt.globalCompositeOperation = 'source-over'; dt.clearRect(0, 0, D, D);
+          if (kind === 'clone') dt.drawImage(snapshot, -(x + cloneOff.x - D / 2), -(y + cloneOff.y - D / 2));
+          else dt.drawImage(processed, -lx, -ly);
+          dt.globalCompositeOperation = 'destination-in'; dt.drawImage(dabImg, 0, 0);
+          sx.drawImage(dabTmp, lx, ly);
+        } else sx.drawImage(dabImg, lx, ly);
+      };
+    }
     put(p.x, p.y);
-    const segment = (q) => { const d = Math.hypot(q.x - last.x, q.y - last.y); const n = Math.floor(d / spacing); for (let i = 1; i <= n; i++) put(last.x + ((q.x - last.x) * i) / n, last.y + ((q.y - last.y) * i) / n); if (n) last = { x: last.x + ((q.x - last.x) * n) / n, y: last.y + ((q.y - last.y) * n) / n }; };
+    const segment = (q) => { const d = Math.hypot(q.x - last.x, q.y - last.y); const n = Math.floor(d / spacing); for (let i = 1; i <= n; i++) put(last.x + ((q.x - last.x) * i) / n, last.y + ((q.y - last.y) * i) / n); if (n) last = { x: q.x, y: q.y }; };
     P.changed();
     return {
-      move: (m, q) => {
-        const evs = m.getCoalescedEvents ? m.getCoalescedEvents() : [m];
-        for (const ev of evs) segment(docPt(ev));
-        P.changed();
-      },
+      move: (m) => { const evs = m.getCoalescedEvents ? m.getCoalescedEvents() : [m]; for (const ev of evs) segment(docPt(ev)); P.changed(); },
       up: () => {
-        const s = L._stroke; delete L._stroke;
-        const nc = P.clone(base); const nx = nc.getContext('2d');
-        nx.globalAlpha = s.opacity; nx.globalCompositeOperation = s.mode === 'erase' ? 'destination-out' : s.mode === 'atop' ? 'source-atop' : 'source-over';
-        nx.drawImage(P.strokeClipped(s, L), 0, 0);
+        const st = L._stroke; delete L._stroke;
+        let nc;
+        if (st.mode === 'replace') {
+          nc = st.cv;
+          if (P.sel) { const keep = P.clone(base); const kx = keep.getContext('2d'); kx.globalCompositeOperation = 'destination-out'; kx.drawImage(P.sel.mask, -offX, -offY); const w2 = P.clone(nc); const wx2 = w2.getContext('2d'); wx2.globalCompositeOperation = 'destination-in'; wx2.drawImage(P.sel.mask, -offX, -offY); kx.globalCompositeOperation = 'source-over'; kx.drawImage(w2, 0, 0); nc = keep; }
+        } else {
+          nc = P.clone(base); const nx = nc.getContext('2d');
+          nx.globalAlpha = st.opacity; nx.globalCompositeOperation = st.mode === 'erase' ? 'destination-out' : st.mode === 'atop' ? 'source-atop' : 'source-over';
+          nx.drawImage(P.strokeClipped(st, L), 0, 0);
+        }
         if (onMask) L.mask = nc; else L.canvas = nc;
         P.commit();
       },
     };
   }
 
+  // Quick mask: paint the selection itself (white adds, eraser removes)
+  function selStroke(p, kind, o) {
+    const W = P.doc.w, H = P.doc.h;
+    const base = P.sel ? P.sel.mask : P.mk(W, H);
+    const sc = P.mk(W, H); const sx = sc.getContext('2d');
+    const dab = P.dab(o.size, o.hardness ?? 70, '#ffffff'); const D = dab.width;
+    PU._qmLive = { base, cv: sc, erase: kind === 'eraser' };
+    let last = { x: p.x, y: p.y }; const spacing = Math.max(1, o.size * 0.12);
+    const put = (x, y) => { sx.globalAlpha = (o.flow ?? 100) / 100; sx.drawImage(dab, x - D / 2, y - D / 2); };
+    put(p.x, p.y); PU.redraw();
+    return {
+      move: (m) => { const q = docPt(m); const d = Math.hypot(q.x - last.x, q.y - last.y); const n = Math.floor(d / spacing); for (let i = 1; i <= n; i++) put(last.x + ((q.x - last.x) * i) / n, last.y + ((q.y - last.y) * i) / n); if (n) last = q; },
+      up: () => { const nc = P.clone(base); const x = nc.getContext('2d'); x.globalAlpha = (o.opacity ?? 100) / 100; x.globalCompositeOperation = kind === 'eraser' ? 'destination-out' : 'source-over'; x.drawImage(sc, 0, 0); PU._qmLive = null; P.sel = { mask: nc }; P.selEdges(); C.emit('photo:selection'); PU.redraw(); },
+    };
+  }
+  PU.liveQuickMask = () => {
+    const q = PU._qmLive; if (!q) return P.sel ? P.sel.mask : null;
+    const c = P.tmp('qm_live', P.doc.w, P.doc.h); const x = c.getContext('2d'); x.drawImage(q.base, 0, 0); x.globalCompositeOperation = q.erase ? 'destination-out' : 'source-over'; x.drawImage(q.cv, 0, 0); return c;
+  };
+
+  PU._tools = TOOLS; PU.docPt = (e) => docPt(e); PU.toScr = (x, y) => toScr(x, y); PU.hover = () => hover; PU.cloneSrc = () => cloneSrc;
   // ---------- crop ----------
   PU.applyCrop = () => {
     if (!P.doc || !cropRect) return;

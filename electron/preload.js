@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld('native', {
   photoOpenDialog: () => ipcRenderer.invoke('photo:openDialog'),
   photoSaveDialog: (n) => ipcRenderer.invoke('photo:saveDialog', n),
   photoAutoPath: (n) => ipcRenderer.invoke('photo:autoPath', n),
+  voiceProcess: (o) => ipcRenderer.invoke('voice:process', o),
+  setTitleBar: (o) => ipcRenderer.invoke('win:titlebar', o),
   lutOpen: () => ipcRenderer.invoke('lut:open'),
   decOpen: (o) => ipcRenderer.invoke('dec:open', o),
   decNext: (k, skip) => ipcRenderer.invoke('dec:next', k, skip),

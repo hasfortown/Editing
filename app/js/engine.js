@@ -11,6 +11,7 @@
     new ResizeObserver(() => E.layout()).observe(C.$('#stage'));
     C.on('change', () => { E.gc(); E.resize(); E.requestDraw(); });
     C.on('mediaProgress', () => E.requestDraw());
+    C.on('voiceReady', () => E.gc());
   };
 
   E.ensureAudio = () => {
@@ -41,27 +42,38 @@
     const url = C.mediaUrl(m);
     if (p && p.url === url) return p;
     if (p) destroy(c.id);
+    const vfx = C.voice && C.voice.processedPath(c);
+    if (c.kind === 'audio' && vfx) {
+      const el = document.createElement('audio'); el.preload = 'auto'; el.crossOrigin = 'anonymous'; el.src = window.native.mediaUrl(vfx);
+      p = { el, url, vfxPath: vfx, clipId: c.id, node: null, gain: null };
+      E.players.set(c.id, p); connectAudio(p); return p;
+    }
     const el = document.createElement(c.kind === 'audio' ? 'audio' : 'video');
     el.preload = 'auto'; el.crossOrigin = 'anonymous'; el.playsInline = true; el.src = url;
     el.addEventListener('seeked', () => { if (!C.UI.playing) E.requestDraw(); });
     el.addEventListener('loadeddata', () => E.requestDraw());
-    p = { el, url, clipId: c.id, node: null, gain: null };
+    p = { el, url, vfxPath: vfx, clipId: c.id, node: null, gain: null };
     E.players.set(c.id, p);
     connectAudio(p);
     if (c.kind === 'video') el.currentTime = c.in;
+    if (c.kind === 'video' && vfx) {
+      const a = document.createElement('audio'); a.preload = 'auto'; a.crossOrigin = 'anonymous'; a.src = window.native.mediaUrl(vfx);
+      p.alt = { el: a, node: null, gain: null }; connectAudio(p.alt);
+    }
     return p;
   };
   function destroy(id) {
     const p = E.players.get(id); if (!p) return;
     try { p.el.pause(); } catch (_) {}
     try { p.node && p.node.disconnect(); p.gain && p.gain.disconnect(); } catch (_) {}
+    if (p.alt) { try { p.alt.el.pause(); p.alt.node && p.alt.node.disconnect(); p.alt.gain && p.alt.gain.disconnect(); } catch (_) {} p.alt.el.removeAttribute('src'); }
     p.el.removeAttribute('src'); try { p.el.load(); } catch (_) {}
     E.players.delete(id);
   }
   E.gc = () => {
     for (const [id, p] of E.players) {
       const c = C.getClip(id);
-      if (!c || !C.mediaOf(c) || C.mediaUrl(C.mediaOf(c)) !== p.url) destroy(id);
+      if (!c || !C.mediaOf(c) || C.mediaUrl(C.mediaOf(c)) !== p.url || ((C.voice && C.voice.processedPath(c)) || undefined) !== (p.vfxPath || undefined)) destroy(id);
     }
   };
 
@@ -110,7 +122,7 @@
     if (!C.UI.playing) return;
     C.UI.playing = false;
     cancelAnimationFrame(raf);
-    for (const p of E.players.values()) { try { p.el.pause(); } catch (_) {} if (p.gain) p.gain.gain.value = 0; }
+    for (const p of E.players.values()) { try { p.el.pause(); } catch (_) {} if (p.gain) p.gain.gain.value = 0; if (p.alt) { try { p.alt.el.pause(); } catch (_) {} if (p.alt.gain) p.alt.gain.gain.value = 0; } }
     C.UI.playhead = C.snapTime(C.UI.playhead);
     E.sync(C.UI.playhead, false);
     C.emit('playstate'); C.emit('time'); E.requestDraw();
@@ -155,8 +167,15 @@
         const drift = Math.abs(el.currentTime - n.src);
         if (el.paused) { if (drift > 0.05) el.currentTime = n.src; el.play().catch(() => {}); }
         else if (hard || drift > 0.25 + 0.1 * c.speed) el.currentTime = n.src;
-        if (p.gain) p.gain.gain.setTargetAtTime(C.audioGain(c, t), E.ac.currentTime, 0.012);
+        if (p.alt) {
+          if (p.gain) p.gain.gain.value = 0;
+          const a = p.alt.el; const ad = Math.abs(a.currentTime - n.src);
+          if (Math.abs(a.playbackRate - c.speed) > 1e-3) a.playbackRate = c.speed;
+          if (a.paused) { if (ad > 0.05) a.currentTime = n.src; a.play().catch(() => {}); } else if (hard || ad > 0.25 + 0.1 * c.speed) a.currentTime = n.src;
+          if (p.alt.gain) p.alt.gain.gain.setTargetAtTime(C.audioGain(c, t), E.ac.currentTime, 0.012);
+        } else if (p.gain) p.gain.gain.setTargetAtTime(C.audioGain(c, t), E.ac.currentTime, 0.012);
       } else {
+        if (p.alt && !p.alt.el.paused) { p.alt.el.pause(); if (p.alt.gain) p.alt.gain.gain.value = 0; }
         if (!el.paused) el.pause();
         if (p.gain) p.gain.gain.value = 0;
         if (Math.abs(el.currentTime - n.src) > 0.5 / C.fps()) el.currentTime = n.src;
@@ -166,6 +185,7 @@
       if (ids.has(id)) continue;
       if (!p.el.paused) p.el.pause();
       if (p.gain) p.gain.gain.value = 0;
+      if (p.alt) { if (!p.alt.el.paused) p.alt.el.pause(); if (p.alt.gain) p.alt.gain.gain.value = 0; }
       // pre-roll upcoming clips so they start instantly
       const c = C.getClip(id);
       if (c && c.start > t && c.start - t < 1.2 && Math.abs(p.el.currentTime - c.in) > 0.05 && !p.el.seeking) p.el.currentTime = c.in;

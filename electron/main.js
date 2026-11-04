@@ -582,3 +582,25 @@ ipcMain.handle('photo:autoPath', async (_e, name) => {
   for (let i = 2; fs.existsSync(out); i++) out = path.join(dir, `${base} ${i}.png`);
   return out;
 });
+
+// ---------- Voice / audio effects (processed once, cached) ----------
+ipcMain.handle('voice:process', async (_e, { path: src, filter }) => {
+  try {
+    const st = await fsp.stat(src);
+    const dir = path.join(userDir(), 'voicefx'); await fsp.mkdir(dir, { recursive: true });
+    const hash = crypto.createHash('sha1').update(src + ':' + st.size + ':' + st.mtimeMs + ':' + filter).digest('hex').slice(0, 20);
+    const out = path.join(dir, hash + '.m4a');
+    try { await fsp.access(out); return { ok: true, path: out }; } catch (_) {}
+    const tmp = out + '.part.m4a';
+    const r = await runFFmpeg(['-hide_banner', '-nostdin', '-y', '-i', src, '-vn', '-af', `aresample=48000,${filter}`, '-c:a', 'aac', '-b:a', '192k', tmp]);
+    if (r.code !== 0) { fsp.unlink(tmp).catch(() => {}); return { ok: false, error: r.err.slice(-500) }; }
+    await fsp.rename(tmp, out);
+    return { ok: true, path: out };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ---------- Title bar colors follow the app theme ----------
+ipcMain.handle('win:titlebar', async (_e, { color, symbol }) => {
+  try { if (win && process.platform !== 'darwin') win.setTitleBarOverlay({ color: /^#[0-9a-f]{6}$/i.test(color) ? color : '#0d0e12', symbolColor: symbol || '#c9ccd6', height: 44 }); } catch (_) {}
+  return true;
+});
