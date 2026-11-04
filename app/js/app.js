@@ -30,6 +30,7 @@
     try { const ts = JSON.parse(localStorage.getItem('cutroom.tlh') || 'null'); if (ts) document.documentElement.style.setProperty('--tl-h', ts + 'px'); } catch (_) {}
 
     C.engine.init(); C.tl.init(); C.preview.init(); C.inspector.init(); C.library.init(); await C.home.init();
+    C.$$('#modeSwitch button').forEach((b) => (b.onclick = () => C.setMode(b.dataset.m)));
     wireTopbar(); wireTransport(); wireTimelineToolbar(); wireKeys(); wireDrop(); wireResizer(); wireMenus();
     A.afterLoad();
     if (restored && C.allClips().length) C.toast('Restored your last session', 'info', 2200);
@@ -71,6 +72,7 @@
     if (p) A.openProjectPath(p);
   };
   A.openProjectPath = async (p, skipConfirm = false) => {
+    if (/\.cutphoto$/i.test(p)) { C.home.hide(); C.setMode('photo'); return C.photoPanels.openProjectPath(p); }
     if (/\.cutroompack$/i.test(p)) return C.share.openPackage(p);
     if (C.collab.mode !== 'off') { if (!(await C.confirm('Leave live session?', 'Opening another project will disconnect you from the collaboration session.', 'Leave'))) return; await C.collab.leave(); }
     if (!skipConfirm && !(await A.confirmDiscard())) return;
@@ -128,7 +130,7 @@
   }
   function wireTopbar() {
     C.$('#btnUndo').onclick = C.undo; C.$('#btnRedo').onclick = C.redo;
-    C.$('#btnExport').onclick = () => C.exporter.open('video');
+    C.$('#btnExport').onclick = () => (C.mode === 'photo' ? C.photoPanels.exportMenu(C.$('#btnExport')) : C.exporter.open('video'));
     C.$('#btnCollab').onclick = () => C.collabUI.open();
     const pn = C.$('#projectName');
     pn.addEventListener('change', () => { const v = pn.value.trim() || 'Untitled project'; pn.value = v; C.act('Rename project', () => { C.project.name = v; }); });
@@ -196,6 +198,7 @@
   function wireKeys() {
     document.addEventListener('keydown', (e) => {
       if (C.modalOpen()) { if (e.key === 'Escape' && C._modalClose && C._modalDismissable !== false) C._modalClose(); return; }
+      if (C.mode === 'photo' && !C.home.visible()) { C.photoPanels.key(e); return; }
       if (C.home.visible()) { if (e.key === 'Escape' && C.allClips().length) C.home.hide(); return; }
       const ctrl = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
@@ -269,6 +272,7 @@
       if (!hasFiles(e)) return;
       e.preventDefault(); depth = 0; document.body.classList.remove('dragging-files');
       const paths = [...e.dataTransfer.files].map((f) => N.getPathForFile(f)).filter(Boolean);
+      if (C.mode === 'photo') { C.photoPanels.openPaths(paths); return; }
       const proj = paths.find((p) => /\.(cutroom|cutroompack)$/i.test(p));
       if (proj) return A.openProjectPath(proj);
       if (!paths.length) return;
@@ -297,6 +301,7 @@
   }
 
   // ---------- menus ----------
+  A.wireMenus = () => wireMenus();
   function wireMenus() {
     const menus = {
       file: () => [
@@ -339,6 +344,9 @@
       clip: () => {
         const p = C.primary();
         return [
+          { label: 'Edit current frame in Photo editor', icon: 'photo', action: () => C.photoPanels.editVideoFrame() },
+          ...(p && p.kind === 'image' ? [{ label: 'Edit this image in Photo editor', icon: 'photo', action: () => C.photoPanels.editImageFile(C.mediaPath(C.mediaOf(p))) }] : []),
+          '-',
           { label: 'Split at playhead', icon: 'split', key: 'S', action: C.ops.splitAtPlayhead },
           { label: 'Detach audio', icon: 'detach', disabled: !(p && p.kind === 'video' && C.hasAudio(p)), action: () => C.ops.detachAudio(p) },
           { label: 'Freeze frame', icon: 'freeze', action: () => C.$('#tlFreeze').click() },
@@ -373,7 +381,8 @@
       if (open) return;
       b.classList.add('open');
       const r = b.getBoundingClientRect();
-      C.menu(r.left, r.bottom + 4, menus[b.dataset.menu]());
+      const src = C.mode === 'photo' && C.photoPanels && C.photoPanels.menus[b.dataset.menu] ? C.photoPanels.menus : menus;
+      C.menu(r.left, r.bottom + 4, src[b.dataset.menu]());
       e.stopPropagation();
     }));
   }

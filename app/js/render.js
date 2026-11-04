@@ -170,7 +170,7 @@
   };
 
   function textFont(tx, px) {
-    return `${tx.italic ? 'italic ' : ''}${tx.bold ? '700' : '400'} ${px}px "${tx.font}", "Segoe UI", Arial, sans-serif`;
+    return `${tx.italic ? 'italic ' : ''}${tx.bold ? '700' : '400'} ${px}px "${tx.font}", "Segoe UI Emoji", "Segoe UI", Arial, sans-serif`;
   }
   function textLines(tx) { const s = tx.uppercase ? tx.content.toUpperCase() : tx.content; return s.split('\n'); }
   function measureText(ctx, c, W, H) {
@@ -183,33 +183,9 @@
     return { w: w + pad * 2, h: lines.length * px * tx.lineHeight + pad * 2, px, lines, pad };
   }
 
-  function drawText(ctx, c, W, H, chars) {
-    const tx = c.text; const ms = measureText(ctx, c, W, H);
-    const { px, lines, pad } = ms;
-    ctx.font = textFont(tx, px);
-    try { ctx.letterSpacing = (tx.letterSpacing * px / 100) + 'px'; } catch (_) {}
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = tx.align;
-    if (tx.bgOpacity > 0) {
-      ctx.save(); ctx.globalAlpha *= tx.bgOpacity; ctx.fillStyle = tx.bg;
-      const r = px * 0.22; ctx.beginPath(); ctx.roundRect(-ms.w / 2, -ms.h / 2, ms.w, ms.h, r); ctx.fill(); ctx.restore();
-    }
-    const total = lines.reduce((a, l) => a + l.length, 0);
-    let visible = chars >= 1 ? Infinity : Math.floor(total * chars);
-    const lh = px * tx.lineHeight;
-    const x0 = tx.align === 'left' ? -ms.w / 2 + pad : tx.align === 'right' ? ms.w / 2 - pad : 0;
-    lines.forEach((line, i) => {
-      let l = line;
-      if (visible !== Infinity) { l = line.slice(0, Math.max(0, visible)); visible -= line.length; }
-      const y = -ms.h / 2 + pad + lh * (i + 0.5);
-      if (tx.shadow > 0) { ctx.shadowColor = `rgba(0,0,0,${tx.shadow})`; ctx.shadowBlur = px * 0.18; ctx.shadowOffsetY = px * 0.05; }
-      if (tx.strokeWidth > 0) {
-        ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.strokeStyle = tx.strokeColor; ctx.lineWidth = tx.strokeWidth * px / 50;
-        ctx.strokeText(l, x0, y); ctx.shadowColor = 'transparent';
-      }
-      ctx.fillStyle = tx.color; ctx.fillText(l, x0, y);
-      ctx.shadowColor = 'transparent';
-    });
+  function drawText(ctx, c, W, H, chars, local = 0) {
+    const ms = measureText(ctx, c, W, H);
+    C.textFX.draw(ctx, c, ms, chars, local);
   }
 
   C.BLENDS = [['source-over', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Color dodge'], ['color-burn', 'Color burn'], ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'], ['hue', 'Hue'], ['saturation', 'Saturation'], ['color', 'Color'], ['luminosity', 'Luminosity'], ['lighter', 'Add']];
@@ -226,8 +202,15 @@
   // Effect clip ("adjustment layer"): applies its effects to everything below it
   function drawEffectClip(ctx, c, t, local, W, H, o) {
     const alpha = c.t.opacity * fadeAlpha(c, local) * (o.alpha ?? 1);
-    if (alpha <= 0.002 || !c.effects || !c.effects.length) return;
+    const graded = c.grade && !C.UI.bypassGrade && C.grade.active(c.grade);
+    if (alpha <= 0.002 || ((!c.effects || !c.effects.length) && !graded)) return;
     const env = { W, H, t: local, T: t, dur: c.duration, seed: C.fx.seedOf(c.id) };
+    if (graded) {
+      const g = C.grade.apply(ctx.canvas, c.grade, W, H);
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = C.clamp(alpha, 0, 1); ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none';
+      ctx.drawImage(g, 0, 0, W, H); ctx.restore();
+    }
+    if (!c.effects || !c.effects.length) return;
     const s = { dx: 0, dy: 0, scale: 1, rot: 0, alpha: 1, blur: 0, chars: 1 };
     C.fx.applyPre(s, c.effects, env);
     if (s.dx || s.dy || s.scale !== 1 || s.rot) {
@@ -253,6 +236,7 @@
     let alpha = c.t.opacity * an.alpha * (o.alpha ?? 1) * fadeAlpha(c, local);
     if (alpha <= 0.002) return;
     if ((c.kind === 'video' || c.kind === 'image') && !src) return;
+    if ((c.kind === 'video' || c.kind === 'image') && c.grade && !C.UI.bypassGrade && C.grade.active(c.grade)) src = C.grade.apply(src, c.grade, Math.max(W, H) * 1.25, Math.max(W, H) * 1.25);
     const shape = fxs ? C.fx.shape(fxs) : null;
     const comp = fxs ? C.fx.compositeFilter(fxs, W) : 'none';
     const layered = !!fxs && (C.fx.hasLayer(fxs) || !!shape || comp !== 'none');
@@ -277,7 +261,7 @@
     const rr = shape ? (Math.min(sz.w, sz.h) * shape.radius) / 100 : 0;
     if (shape) { g.save(); g.beginPath(); g.roundRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h, rr); g.clip(); }
     g.filter = filterStr(c.fx, W, an.blur + (o.blur || 0));
-    if (c.kind === 'text') drawText(g, c, W, H, an.chars);
+    if (c.kind === 'text') drawText(g, c, W, H, an.chars, local);
     else if (c.kind === 'color') { g.fillStyle = c.color; g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h); }
     else g.drawImage(src, -sz.w / 2, -sz.h / 2, sz.w, sz.h);
     g.filter = 'none';

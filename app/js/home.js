@@ -22,15 +22,16 @@
           <h1 class="home-title">${'Cutroom'.split('').map((ch, i) => `<span style="animation-delay:${0.25 + i * 0.06}s">${ch}</span>`).join('')}</h1>
           <p class="home-tag">Edit anything. Animate everything. Create together.</p>
         </div>
+        <div class="home-editors">
+          <button class="editor-card video" data-ed="video" style="animation-delay:.45s"><div class="ec-ico">🎬</div><div><b>Video editor</b><small>Multi-track editing, effects, keyframes, color grading, text, audio & live collaboration</small></div><span class="ec-go" data-go="video">Open ${C.icon('nextFrame')}</span></button>
+          <button class="editor-card photo" data-ed="photo" style="animation-delay:.52s"><div class="ec-ico">🖼️</div><div><b>Photo editor</b><small>Layers, masks, brushes, selections, layer styles, adjustments & filters</small></div><span class="ec-go" data-go="photo">Open ${C.icon('nextFrame')}</span></button>
+        </div>
         <div class="home-grid">
-          <section class="home-card home-new" style="animation-delay:.55s">
-            <h3>${C.icon('plus')}New project</h3>
-            <div class="aspect-cards">${ASPECT_CARDS.map(([a, n, d, w, h]) => `<button class="aspect-card" data-a="${a}"><div class="ar-box"><span style="width:${w}px;height:${h}px"></span></div><b>${n}</b><small>${a} · ${d}</small></button>`).join('')}</div>
-          </section>
+          <section class="home-card home-new" style="animation-delay:.6s"><h3 id="homeNewTitle"></h3><div id="homeNew"></div></section>
           <section class="home-card home-side" style="animation-delay:.68s">
             <button class="home-continue" id="homeContinue"><div class="hc-thumb"><canvas width="320" height="180"></canvas></div><div class="hc-text"><small>Continue editing</small><b id="homeContName">Untitled project</b><span id="homeContMeta"></span></div>${C.icon('nextFrame')}</button>
             <div class="home-actions">
-              <button class="home-act" id="homeOpen">${C.icon('folder')}<span><b>Open project</b><small>.cutroom or shared .cutroompack</small></span></button>
+              <button class="home-act" id="homeOpen">${C.icon('folder')}<span><b id="homeOpenT">Open project</b><small id="homeOpenS">.cutroom or shared .cutroompack</small></span></button>
               <button class="home-act" id="homeStudio">${C.icon('wand')}<span><b>Effect Studio</b><small>Design & share effect presets</small></span></button>
             </div>
             <div class="home-join"><div class="hj-title">${C.icon('users')}<b>Collaborate</b><small>Got a code from a friend?</small></div>
@@ -43,9 +44,16 @@
     document.body.appendChild(el);
     C.fillIcons(el);
     N.info().then((i) => { el.querySelector('#homeVer').textContent = 'v' + i.version; });
-    el.querySelectorAll('.aspect-card').forEach((b) => (b.onclick = async () => { if (await C.app.newProject(b.dataset.a)) Hm.hide(); }));
-    el.querySelector('#homeContinue').onclick = () => Hm.hide();
-    el.querySelector('#homeOpen').onclick = async () => { const p = await N.shareOpenDialog(); if (p) { Hm.hide(); C.app.openProjectPath(p); } };
+    try { Hm.tab = localStorage.getItem('cutroom.homeTab') || 'video'; } catch (_) { Hm.tab = 'video'; }
+    el.querySelectorAll('.editor-card').forEach((b) => (b.onclick = (e) => {
+      if (e.target.closest('[data-go]')) { Hm.hide(); C.setMode(b.dataset.ed); if (b.dataset.ed === 'photo' && !C.photo.doc) setTimeout(() => C.photoPanels.newDialog(), 350); return; }
+      Hm.tab = b.dataset.ed; try { localStorage.setItem('cutroom.homeTab', Hm.tab); } catch (_) {} renderNew();
+    }));
+    el.querySelector('#homeContinue').onclick = () => { Hm.hide(); C.setMode(Hm.tab); };
+    el.querySelector('#homeOpen').onclick = async () => {
+      if (Hm.tab === 'photo') { Hm.hide(); C.setMode('photo'); C.photoPanels.openImage(); return; }
+      const p = await N.shareOpenDialog(); if (p) { Hm.hide(); C.setMode('video'); C.app.openProjectPath(p); }
+    };
     el.querySelector('#homeStudio').onclick = () => { Hm.hide(); C.presets.studio(); };
     const code = el.querySelector('#homeCode');
     code.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') join(); });
@@ -56,12 +64,51 @@
     C.$('.brand').dataset.tip = 'Home';
   };
 
-  Hm.addRecent = async (path, name) => {
+  const PHOTO_SIZES = [['YouTube thumbnail', 1280, 720, '16:9'], ['Instagram post', 1080, 1080, '1:1'], ['Story / TikTok', 1080, 1920, '9:16'], ['Full HD', 1920, 1080, '16:9'], ['4K wallpaper', 3840, 2160, '16:9'], ['A4 print', 2480, 3508, 'A4']];
+  function renderNew() {
+    el.querySelectorAll('.editor-card').forEach((b) => b.classList.toggle('on', b.dataset.ed === Hm.tab));
+    const box = el.querySelector('#homeNew'), title = el.querySelector('#homeNewTitle');
+    if (Hm.tab === 'photo') {
+      title.innerHTML = `${C.icon('plus')}New image`;
+      box.innerHTML = `<div class="aspect-cards">${PHOTO_SIZES.map(([n, w, h, a], i) => { const k = 48 / Math.max(w, h); return `<button class="aspect-card" data-i="${i}"><div class="ar-box"><span style="width:${Math.round(w * k)}px;height:${Math.round(h * k)}px"></span></div><b>${n}</b><small>${w}×${h}</small></button>`; }).join('')}<button class="aspect-card" data-i="custom"><div class="ar-box"><span style="width:40px;height:40px;border-style:dashed"></span></div><b>Custom</b><small>Any size</small></button></div>`;
+      box.querySelectorAll('.aspect-card').forEach((b) => (b.onclick = async () => {
+        Hm.hide(); C.setMode('photo');
+        if (b.dataset.i === 'custom') return setTimeout(() => C.photoPanels.newDialog(), 350);
+        const [n, w, h] = PHOTO_SIZES[+b.dataset.i];
+        setTimeout(async () => { if (!(await C.photoPanels.confirmDiscard())) return; C.photo.newDoc(w, h, '#ffffff', n); C.photoUI.fit(); C.photoPanels.renderAll(); }, 350);
+      }));
+      el.querySelector('#homeOpenT').textContent = 'Open image'; el.querySelector('#homeOpenS').textContent = 'PNG, JPG, WebP… or a .cutphoto project';
+    } else {
+      title.innerHTML = `${C.icon('plus')}New video project`;
+      box.innerHTML = `<div class="aspect-cards">${ASPECT_CARDS.map(([a, n, d, w, h]) => `<button class="aspect-card" data-a="${a}"><div class="ar-box"><span style="width:${w}px;height:${h}px"></span></div><b>${n}</b><small>${a} · ${d}</small></button>`).join('')}</div>`;
+      box.querySelectorAll('.aspect-card').forEach((b) => (b.onclick = async () => { C.setMode('video'); if (await C.app.newProject(b.dataset.a)) Hm.hide(); }));
+      el.querySelector('#homeOpenT').textContent = 'Open project'; el.querySelector('#homeOpenS').textContent = '.cutroom or shared .cutroompack';
+    }
+    renderContinue();
+  }
+  Hm.renderNew = () => renderNew();
+  function renderContinue() {
+    const cont = el.querySelector('#homeContinue'); const cv = cont.querySelector('canvas'); const x = cv.getContext('2d');
+    const draw = (s) => { x.fillStyle = '#000'; x.fillRect(0, 0, 320, 180); const k = Math.min(320 / s.width, 180 / s.height); x.drawImage(s, (320 - s.width * k) / 2, (180 - s.height * k) / 2, s.width * k, s.height * k); };
+    if (Hm.tab === 'photo') {
+      const has = !!C.photo.doc; cont.style.display = has ? '' : 'none'; if (!has) return;
+      el.querySelector('#homeContName').textContent = C.photo.doc.name;
+      el.querySelector('#homeContMeta').textContent = `${C.photo.doc.w}×${C.photo.doc.h} · ${C.photo.doc.layers.length} layer${C.photo.doc.layers.length === 1 ? '' : 's'}`;
+      draw(C.photo.flattened());
+    } else {
+      const has = C.allClips().length > 0; cont.style.display = has ? '' : 'none'; if (!has) return;
+      el.querySelector('#homeContName').textContent = C.project.name;
+      el.querySelector('#homeContMeta').textContent = `${C.allClips().length} clips · ${C.fmtDur(C.duration())}${C.UI.dirty && !C.UI.filePath ? ' · autosaved' : ''}`;
+      draw(C.engine.canvas);
+    }
+  }
+
+  Hm.addRecent = async (path, name, kind = 'video', srcCanvas = null) => {
     if (!path) return;
     let thumb = '';
-    try { const c = document.createElement('canvas'); c.width = 320; c.height = 180; const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, 320, 180); const s = C.engine.canvas; const k = Math.min(320 / s.width, 180 / s.height); x.drawImage(s, (320 - s.width * k) / 2, (180 - s.height * k) / 2, s.width * k, s.height * k); thumb = c.toDataURL('image/jpeg', 0.7); } catch (_) {}
+    try { const c = document.createElement('canvas'); c.width = 320; c.height = 180; const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, 320, 180); const s = srcCanvas || C.engine.canvas; const k = Math.min(320 / s.width, 180 / s.height); x.drawImage(s, (320 - s.width * k) / 2, (180 - s.height * k) / 2, s.width * k, s.height * k); thumb = c.toDataURL('image/jpeg', 0.7); } catch (_) {}
     recents = (await N.recentsLoad()).filter((r) => r.path !== path);
-    recents.unshift({ path, name: name || C.baseName(path).replace(/\.cutroom$/i, ''), time: Date.now(), thumb, duration: C.duration() });
+    recents.unshift({ path, kind, name: name || C.baseName(path).replace(/\.(cutroom|cutphoto)$/i, ''), time: Date.now(), thumb, duration: kind === 'video' ? C.duration() : 0 });
     await N.recentsSave(recents);
   };
 
@@ -72,11 +119,13 @@
     if (!recents.length) { g.innerHTML = '<div class="hint" style="grid-column:1/-1">Projects you save or open will appear here.</div>'; return; }
     for (const r of recents.slice(0, 12)) {
       const exists = await N.exists(r.path);
-      const card = C.h(`<button class="recent-card ${exists ? '' : 'missing'}" title="${C.esc(r.path)}"><div class="rc-thumb">${r.thumb ? `<img src="${r.thumb}" alt="">` : C.icon('film')}</div><b>${C.esc(r.name)}</b><small>${exists ? ago(r.time) + (r.duration ? ' · ' + C.fmtDur(r.duration) : '') : 'File moved or deleted'}</small><span class="rc-x" data-tip="Remove from list">${C.icon('x')}</span></button>`);
+      const isPhoto = r.kind === 'photo' || /\.cutphoto$/i.test(r.path);
+      const card = C.h(`<button class="recent-card ${exists ? '' : 'missing'}" title="${C.esc(r.path)}"><span class="rc-badge">${isPhoto ? '🖼️ PHOTO' : '🎬 VIDEO'}</span><div class="rc-thumb">${r.thumb ? `<img src="${r.thumb}" alt="">` : C.icon('film')}</div><b>${C.esc(r.name)}</b><small>${exists ? ago(r.time) + (r.duration ? ' · ' + C.fmtDur(r.duration) : '') : 'File moved or deleted'}</small><span class="rc-x" data-tip="Remove from list">${C.icon('x')}</span></button>`);
       card.onclick = async (e) => {
         if (e.target.closest('.rc-x')) { e.stopPropagation(); recents = recents.filter((x) => x.path !== r.path); await N.recentsSave(recents); renderRecents(); return; }
         if (!exists) { C.toast('That project file was moved or deleted', 'err'); return; }
-        Hm.hide(); C.app.openProjectPath(r.path);
+        Hm.hide();
+        if (isPhoto) { C.setMode('photo'); C.photoPanels.openProjectPath(r.path); } else { C.setMode('video'); C.app.openProjectPath(r.path); }
       };
       g.appendChild(card);
     }
@@ -85,18 +134,10 @@
 
   Hm.show = () => {
     C.engine.pause();
-    const hasWork = C.allClips().length > 0;
-    const cont = el.querySelector('#homeContinue');
-    cont.style.display = hasWork ? '' : 'none';
-    if (hasWork) {
-      el.querySelector('#homeContName').textContent = C.project.name;
-      el.querySelector('#homeContMeta').textContent = `${C.allClips().length} clips · ${C.fmtDur(C.duration())}${C.UI.dirty && !C.UI.filePath ? ' · autosaved' : ''}`;
-      const cv = cont.querySelector('canvas'); const x = cv.getContext('2d'); const s = C.engine.canvas; x.fillStyle = '#000'; x.fillRect(0, 0, 320, 180);
-      const k = Math.min(320 / s.width, 180 / s.height); x.drawImage(s, (320 - s.width * k) / 2, (180 - s.height * k) / 2, s.width * k, s.height * k);
-    }
+    renderNew();
     renderRecents();
     el.classList.remove('hide'); el.classList.add('show');
-    el.querySelectorAll('.home-card, .home-recent, .home-title span, .home-logo, .home-tag').forEach((n) => { n.style.animation = 'none'; void n.offsetWidth; n.style.animation = ''; });
+    el.querySelectorAll('.home-card, .home-recent, .editor-card, .home-title span, .home-logo, .home-tag').forEach((n) => { n.style.animation = 'none'; void n.offsetWidth; n.style.animation = ''; });
     startBg();
   };
   Hm.hide = () => {

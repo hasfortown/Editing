@@ -1,7 +1,7 @@
 {
   "name": "cutroom",
   "productName": "Cutroom",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Cutroom - a fast, clean multi-track video editor",
   "main": "electron/main.js",
   "author": "Cutroom",
@@ -51,6 +51,13 @@
         "ext": "cutroompack",
         "name": "Cutroom Share Package",
         "description": "Cutroom project with media",
+        "icon": "build/icon.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "cutphoto",
+        "name": "Cutroom Photo",
+        "description": "Cutroom photo project",
         "icon": "build/icon.ico",
         "role": "Editor"
       }

@@ -148,12 +148,12 @@
     if (sel.length > 1) return renderMulti(sel);
     const c = sel[0];
     const tabs = {
-      video: [['video', 'Video'], ['adjust', 'Adjust'], ['anim', 'Animation'], ['audio', 'Audio'], ['speed', 'Speed'], ['transition', 'Transition']],
-      image: [['video', 'Image'], ['adjust', 'Adjust'], ['anim', 'Animation'], ['transition', 'Transition']],
-      text: [['text', 'Text'], ['video', 'Transform'], ['anim', 'Animation'], ['transition', 'Transition']],
-      audio: [['audio', 'Audio'], ['speed', 'Speed']],
-      color: [['video', 'Color'], ['adjust', 'Adjust'], ['anim', 'Animation'], ['transition', 'Transition']],
-      effect: [['effects', 'Effects'], ['video', 'Layer']],
+      video: [['video', 'Video'], ['color', 'Color'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['audio', 'Audio'], ['speed', 'Speed'], ['transition', 'Transition']],
+      image: [['video', 'Image'], ['color', 'Color'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
+      text: [['text', 'Text'], ['video', 'Transform'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
+      audio: [['audio', 'Audio'], ['motion', 'Keyframes'], ['speed', 'Speed']],
+      color: [['video', 'Color'], ['adjust', 'Adjust'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
+      effect: [['effects', 'Effects'], ['color', 'Color grade'], ['motion', 'Keyframes'], ['video', 'Layer']],
     }[c.kind];
     if (c.kind !== 'audio' && c.kind !== 'effect') tabs.splice(1, 0, ['effects', 'Effects']);
     if (c.kind === 'video' && !C.hasAudio(c)) tabs.splice(tabs.findIndex((t) => t[0] === 'audio'), 1);
@@ -173,7 +173,7 @@
     tabs.forEach(([id, l]) => { const b = C.h(`<button class="tab ${id === tab ? 'active' : ''}">${l}</button>`); b.onclick = () => { tab = id; I.render(true); }; tb.appendChild(b); });
     root.appendChild(head);
     const body = C.h('<div class="insp-body"></div>'); root.appendChild(body);
-    ({ video: tabTransform, adjust: tabAdjust, anim: tabAnim, audio: tabAudio, speed: tabSpeed, transition: tabTransition, text: tabText, effects: tabEffects })[tab](body, c);
+    ({ video: tabTransform, adjust: tabAdjust, color: tabColor, motion: tabMotion, anim: tabAnim, audio: tabAudio, speed: tabSpeed, transition: tabTransition, text: tabText, effects: tabEffects })[tab](body, c);
     if (sameSel) root.scrollTop = prevScroll;
   };
 
@@ -241,6 +241,85 @@
       chips.appendChild(b);
     });
     s3.appendChild(chips);
+  }
+
+  function tabMotion(body, c) { C.kfEditor.render(body, c, { section, commit, refreshers }); }
+
+  let hslBand = 0;
+  function tabColor(body, c) {
+    const G = C.grade;
+    const g = () => { if (!c.grade) c.grade = G.defaults(); return c.grade; };
+    if (!G.available()) body.appendChild(C.h('<p class="hint" style="color:var(--warn)">GPU color grading is unavailable on this computer — only basic adjustments will apply.</p>'));
+    // compare + copy/paste
+    const top = C.h(`<div class="fx-actions"><button class="btn" data-a="cmp" data-tip="Hold to see the original">${C.icon('eye')}<span>Hold to compare</span></button><button class="icon-btn" data-a="copy" data-tip="Copy grade">${C.icon('copy')}</button><button class="icon-btn" data-a="paste" data-tip="Paste grade">${C.icon('import')}</button><button class="icon-btn" data-a="reset" data-tip="Reset all color">${C.icon('refresh')}</button></div>`);
+    const cmp = top.querySelector('[data-a=cmp]');
+    cmp.addEventListener('pointerdown', () => { C.UI.bypassGrade = true; C.engine.requestDraw(); });
+    const off = () => { if (C.UI.bypassGrade) { C.UI.bypassGrade = false; C.engine.requestDraw(); } };
+    cmp.addEventListener('pointerup', off); cmp.addEventListener('pointerleave', off);
+    top.querySelector('[data-a=copy]').onclick = () => { I._gradeClip = C.deep(c.grade || G.defaults()); C.toast('Grade copied — select other clips and paste', 'ok', 1600); };
+    top.querySelector('[data-a=paste]').onclick = () => { if (!I._gradeClip) return C.toast('Copy a grade first', 'info'); const targets = C.selectedClips().filter((x) => x.kind === 'video' || x.kind === 'image' || x.kind === 'effect'); C.begin(); targets.forEach((x) => { x.grade = C.deep(I._gradeClip); }); commit('Paste grade'); I.render(true); };
+    top.querySelector('[data-a=reset]').onclick = () => { C.begin(); c.grade = null; for (const k of Object.keys(c.kf || {})) if (k.startsWith('grade.')) delete c.kf[k]; commit('Reset color'); I.render(true); };
+    body.appendChild(top);
+
+    const lk = section(body, 'Looks');
+    const looks = C.h('<div class="looks"></div>');
+    G.LOOKS.forEach((l) => {
+      const b = C.h(`<button class="look"><canvas width="96" height="54"></canvas><span>${C.esc(l.name)}</span></button>`);
+      const cv = b.querySelector('canvas');
+      requestAnimationFrame(() => { try { const s = C.fx.sampleImage(); const tmp = document.createElement('canvas'); tmp.width = 96; tmp.height = 54; const x = tmp.getContext('2d'); const sw = s.width || s.naturalWidth, sh = s.height || s.naturalHeight, k = Math.max(96 / sw, 54 / sh); x.drawImage(s, (96 - sw * k) / 2, (54 - sh * k) / 2, sw * k, sh * k); cv.getContext('2d').drawImage(G.available() ? G.apply(tmp, Object.assign(G.defaults(), l.g)) : tmp, 0, 0, 96, 54); } catch (_) {} });
+      b.onclick = () => { C.begin(); c.grade = G.applyLook(c.grade || G.defaults(), l); commit('Look: ' + l.name); I.render(true); };
+      looks.appendChild(b);
+    });
+    lk.appendChild(looks);
+
+    const L = section(body, 'Light');
+    prop(L, c, 'grade.exposure', 'Exposure', { min: -4, max: 4, step: 0.01, def: 0, unit: ' EV', fmt: (v) => (+v).toFixed(2) });
+    for (const [k, l] of [['contrast', 'Contrast'], ['highlights', 'Highlights'], ['shadows', 'Shadows'], ['whites', 'Whites'], ['blacks', 'Blacks']]) prop(L, c, 'grade.' + k, l, { min: -100, max: 100, step: 1, def: 0 });
+    const Co = section(body, 'Color');
+    for (const [k, l, mn, mx, u] of [['temp', 'Temperature', -100, 100, ''], ['tint', 'Tint', -100, 100, ''], ['vibrance', 'Vibrance', -100, 100, ''], ['saturation', 'Saturation', -100, 100, ''], ['hue', 'Hue shift', -180, 180, '°'], ['bw', 'Black & white', 0, 100, '%']]) prop(Co, c, 'grade.' + k, l, { min: mn, max: mx, step: 1, def: 0, unit: u });
+
+    const W = section(body, 'Color wheels');
+    const wrow = C.h('<div class="wheels"></div>');
+    for (const [k, l] of [['lift', 'Shadows'], ['gamma', 'Midtones'], ['gain', 'Highlights']]) {
+      C.colorUI.wheel(wrow, l, () => (c.grade && c.grade[k]) || { x: 0, y: 0, l: 0 }, (v, isLive) => { C.begin(); g()[k] = Object.assign({ x: 0, y: 0, l: 0 }, v); if (isLive) live(); else commit('Color wheel'); });
+    }
+    W.appendChild(wrow);
+    W.appendChild(C.h('<p class="hint">Drag in a wheel to tint that range · slider below = brightness · Shift for fine control · double-click to reset.</p>'));
+
+    const Cu = section(body, 'Curves');
+    C.colorUI.curves(Cu, () => c.grade && c.grade.curves, (v, isLive) => { C.begin(); g().curves = v; if (isLive) live(); else commit('Curves'); });
+
+    const H = section(body, 'HSL — adjust one color');
+    const bands = C.h(`<div class="hsl-bands">${G.HSL_BANDS.map(([n, , col], i) => `<button data-i="${i}" title="${n}" style="background:${col}" class="${i === hslBand ? 'on' : ''}"></button>`).join('')}</div>`);
+    H.appendChild(bands);
+    const hb = C.h('<div></div>'); H.appendChild(hb);
+    const renderBand = () => {
+      hb.innerHTML = '';
+      bands.querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.i === hslBand));
+      hb.appendChild(C.h(`<div class="hint" style="margin:6px 0 2px"><b style="color:var(--text)">${G.HSL_BANDS[hslBand][0]}</b> tones</div>`));
+      const bandArr = () => { const gg = g(); if (!gg.hsl) gg.hsl = G.HSL_BANDS.map(() => [0, 0, 0]); return gg.hsl[hslBand]; };
+      ['Hue', 'Saturation', 'Luminance'].forEach((l, j) => slider(hb, l, () => (c.grade && c.grade.hsl ? c.grade.hsl[hslBand][j] : 0), (v) => { bandArr()[j] = v; }, { min: -100, max: 100, step: 1, def: 0 }));
+    };
+    bands.querySelectorAll('button').forEach((b) => (b.onclick = () => { hslBand = +b.dataset.i; renderBand(); }));
+    renderBand();
+
+    const D = section(body, 'Detail & finish');
+    prop(D, c, 'grade.sharpen', 'Sharpen', { min: 0, max: 100, step: 1, def: 0 });
+    prop(D, c, 'grade.fade', 'Fade (matte)', { min: 0, max: 100, step: 1, def: 0 });
+    if (c.fx) { prop(D, c, 'fx.vignette', 'Vignette', { min: 0, max: 100, step: 1, def: 0 }); prop(D, c, 'fx.blur', 'Blur', { min: 0, max: 60, step: 1, def: 0 }); }
+
+    const LU = section(body, 'LUT');
+    const lut = c.grade && c.grade.lut;
+    const lrow = C.h(`<div style="display:flex;gap:8px;align-items:center"><button class="btn" style="flex:1;justify-content:center">${C.icon('import')}<span>${lut ? 'Change LUT…' : 'Load .cube LUT…'}</span></button>${lut ? `<button class="icon-btn" data-tip="Remove LUT">${C.icon('x')}</button>` : ''}</div>`);
+    lrow.querySelector('.btn').onclick = async () => {
+      const pth = await window.native.lutOpen(); if (!pth) return;
+      try { await G.loadLut(pth); } catch (e) { return C.toast(e.message, 'err'); }
+      C.begin(); g().lut = { path: pth, name: C.baseName(pth) }; if (g().lutMix == null) g().lutMix = 1; commit('Load LUT'); I.render(true);
+    };
+    const rm = lrow.querySelector('.icon-btn'); if (rm) rm.onclick = () => { C.begin(); g().lut = null; commit('Remove LUT'); I.render(true); };
+    LU.appendChild(lrow);
+    if (lut) { LU.appendChild(C.h(`<div class="hint" style="margin:8px 0 2px">${C.icon('film').replace('<svg', '<svg style="width:12px;height:12px;vertical-align:-1px"')} ${C.esc(lut.name)}</div>`)); prop(LU, c, 'grade.lutMix', 'Intensity', { min: 0, max: 1, step: 0.01, ...pct, def: 1 }); }
+    else LU.appendChild(C.h('<p class="hint" style="margin-top:8px">Use any 3D LUT in .cube format — film emulations, camera log conversions, creative looks.</p>'));
   }
 
   function tabAnim(body, c) {
@@ -414,6 +493,34 @@
     const bg = section(body, 'Background');
     color(bg, 'Color', () => tx.bg, (v) => { tx.bg = v; });
     slider(bg, 'Opacity', () => tx.bgOpacity, (v) => { tx.bgOpacity = C.clamp(v, 0, 1); }, { min: 0, max: 1, step: 0.01, ...pct, def: 0 });
+    select(bg, 'Style', [['box', 'Box'], ['pill', 'Pill'], ['line', 'Highlight each line']], () => tx.bgStyle || 'box', (v) => { tx.bgStyle = v; });
+    const D = C.textFX.DEFAULTS; for (const k in D) if (tx[k] === undefined) tx[k] = C.deep(D[k]);
+    const la = section(body, 'Letter animation');
+    select(la, 'In', C.textFX.CHAR_IN, () => tx.charIn, (v) => { tx.charIn = v; });
+    select(la, 'Out', C.textFX.CHAR_OUT, () => tx.charOut, (v) => { tx.charOut = v; });
+    select(la, 'Loop', C.textFX.CHAR_LOOP, () => tx.charLoop, (v) => { tx.charLoop = v; });
+    slider(la, 'Stagger', () => tx.stagger, (v) => { tx.stagger = C.clamp(v, 0, 1); }, { min: 0, max: 0.3, step: 0.005, ...secs, def: 0.04 });
+    slider(la, 'Letter speed', () => tx.charDur, (v) => { tx.charDur = C.clamp(v, 0.05, 3); }, { min: 0.05, max: 1.5, step: 0.01, ...secs, def: 0.45 });
+    slider(la, 'Loop speed', () => tx.loopSpeed, (v) => { tx.loopSpeed = C.clamp(v, 0.1, 5); }, { min: 0.1, max: 4, step: 0.05, def: 1, fmt: (v) => (+v).toFixed(2) + '×' });
+    la.appendChild(C.h('<p class="hint">Letter animations play per character. Combine with the clip Animation tab and keyframes for full control.</p>'));
+    const fl = section(body, 'Fill');
+    seg(fl, 'Type', [['solid', 'Solid'], ['gradient', 'Gradient']], () => tx.fill, (v) => { tx.fill = v; I.render(true); });
+    if (tx.fill === 'gradient') {
+      color(fl, 'From', () => tx.grad1, (v) => { tx.grad1 = v; });
+      color(fl, 'To', () => tx.grad2, (v) => { tx.grad2 = v; });
+      slider(fl, 'Angle', () => tx.gradAngle, (v) => { tx.gradAngle = v; }, { min: 0, max: 360, step: 1, unit: '°', def: 90 });
+    }
+    const gl = section(body, 'Glow & 3D');
+    prop(gl, c, 'text.glow', 'Glow', { min: 0, max: 100, step: 1, def: 0 });
+    color(gl, 'Glow color', () => tx.glowColor, (v) => { tx.glowColor = v; });
+    prop(gl, c, 'text.extrude', '3D depth', { min: 0, max: 60, step: 0.5, def: 0 });
+    color(gl, '3D color', () => tx.extrudeColor, (v) => { tx.extrudeColor = v; });
+    slider(gl, '3D angle', () => tx.extrudeAngle, (v) => { tx.extrudeAngle = v; }, { min: 0, max: 360, step: 1, unit: '°', def: 135 });
+    const cu = section(body, 'Curve & second outline');
+    prop(cu, c, 'text.curve', 'Curve', { min: -100, max: 100, step: 1, def: 0 });
+    prop(cu, c, 'text.stroke2Width', 'Outer outline', { min: 0, max: 20, step: 0.5, def: 0, clamp: (v) => Math.max(0, v) });
+    color(cu, 'Outer color', () => tx.stroke2Color, (v) => { tx.stroke2Color = v; });
+    color(cu, 'Shadow color', () => tx.shadowColor, (v) => { tx.shadowColor = v; });
     const f = section(body, 'Fade');
     slider(f, 'Fade in', () => c.fadeIn, (v) => { c.fadeIn = C.clamp(v, 0, c.duration - c.fadeOut); }, { min: 0, max: Math.min(5, c.duration), step: 0.05, ...secs, def: 0 });
     slider(f, 'Fade out', () => c.fadeOut, (v) => { c.fadeOut = C.clamp(v, 0, c.duration - c.fadeIn); }, { min: 0, max: Math.min(5, c.duration), step: 0.05, ...secs, def: 0 });

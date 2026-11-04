@@ -118,6 +118,7 @@
       C.menu(e.clientX, e.clientY, [
         { label: 'Add at playhead', icon: 'plus', disabled: r.status !== 'ready', action: () => addAtPlayhead(m) },
         { label: 'Show in folder', icon: 'folder', action: () => window.native.showItem(C.mediaPath(m)) },
+        ...(m.kind === 'image' ? [{ label: 'Edit in Photo editor', icon: 'photo', action: () => C.photoPanels.editImageFile(C.mediaPath(m)) }] : []),
         { label: 'Relink file…', icon: 'link', action: () => C.relinkMedia(m) },
         { label: 'Rename', icon: 'text', action: async () => { const v = await C.prompt('Rename media', 'Name', m.name); if (v) C.act('Rename media', () => { C.project.media[m.id].name = v; }); C.emit('media'); } },
         '-',
@@ -171,7 +172,16 @@
     const add = C.h(`<button class="btn primary block" style="margin-bottom:14px">${C.icon('plus')}<span>Add text</span></button>`);
     add.onclick = () => C.act('Add text', () => { const c = C.ops.addText(null); C.select([c.id]); C.emit('focusText'); });
     panel.appendChild(add);
-    panel.appendChild(C.h('<h4>Presets</h4>'));
+    panel.appendChild(C.h('<h4>Animated styles</h4>'));
+    const sg = C.h('<div class="card-grid"></div>');
+    C.textFX.STYLES.forEach((p) => {
+      const card = C.h(`<div class="card" draggable="true"><div class="card-art"><div class="text-preset" style="${p.css}">${C.esc(p.text.content.split('\n')[0])}</div></div><div class="card-label">${p.name}</div></div>`);
+      card.onclick = () => C.act('Add text', () => { const c = C.ops.addText(p); C.select([c.id]); });
+      card.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-cutroom-text', JSON.stringify(p)));
+      sg.appendChild(card);
+    });
+    panel.appendChild(sg);
+    panel.appendChild(C.h('<h4>Basic presets</h4>'));
     const grid = C.h('<div class="card-grid"></div>');
     C.TEXT_PRESETS.forEach((p) => {
       const card = C.h(`<div class="card" draggable="true"><div class="card-art"><div class="text-preset" style="${p.css}">${C.esc(p.text.content.split('\n')[0])}</div></div><div class="card-label">${p.name}</div></div>`);

@@ -1,14 +1,20 @@
 /* Cutroom — keyframes: animate any numeric property over time */
 (function (C) {
   const KF = (C.kf = {});
-  KF.EASES = [['linear', 'Linear'], ['inout', 'Ease in & out'], ['in', 'Ease in'], ['out', 'Ease out'], ['hold', 'Hold']];
+  KF.EASES = [['linear', 'Linear'], ['inout', 'Ease in & out'], ['in', 'Ease in'], ['out', 'Ease out'], ['sine', 'Smooth (sine)'], ['expo', 'Expo in & out'], ['back', 'Overshoot'], ['bounce', 'Bounce'], ['elastic', 'Elastic'], ['hold', 'Hold']];
   const easeFn = {
     linear: (k) => k,
     in: (k) => k * k * k,
     out: (k) => 1 - Math.pow(1 - k, 3),
     inout: (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2),
+    sine: (k) => -(Math.cos(Math.PI * k) - 1) / 2,
+    expo: (k) => (k <= 0 ? 0 : k >= 1 ? 1 : k < 0.5 ? Math.pow(2, 20 * k - 10) / 2 : (2 - Math.pow(2, -20 * k + 10)) / 2),
+    back: (k) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); },
+    bounce: (k) => { const n = 7.5625, d = 2.75; if (k < 1 / d) return n * k * k; if (k < 2 / d) return n * (k -= 1.5 / d) * k + 0.75; if (k < 2.5 / d) return n * (k -= 2.25 / d) * k + 0.9375; return n * (k -= 2.625 / d) * k + 0.984375; },
+    elastic: (k) => (k <= 0 ? 0 : k >= 1 ? 1 : Math.pow(2, -10 * k) * Math.sin((k * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1),
     hold: () => 0,
   };
+  KF.easeFn = easeFn;
 
   // ---- property paths: "t.x", "fx.blur", "volume", "text.size", "e.<effectId>.<param>"
   KF.get = (c, path) => {
@@ -50,6 +56,7 @@
     if (!KF.any(c)) return c;
     const o = Object.assign({}, c, { t: Object.assign({}, c.t), fx: Object.assign({}, c.fx) });
     if (c.text) o.text = Object.assign({}, c.text);
+    if (c.grade) o.grade = Object.assign({}, c.grade);
     if (c.effects) o.effects = c.effects.map((e) => Object.assign({}, e, { p: Object.assign({}, e.p) }));
     for (const path in c.kf) if (c.kf[path] && c.kf[path].length) KF.set(o, path, KF.value(c, path, local));
     return o;

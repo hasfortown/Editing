@@ -16,6 +16,7 @@
       <button class="menu-btn" data-menu="clip">Clip</button>
       <button class="menu-btn" data-menu="help">Help</button>
     </div>
+    <div class="seg mode-switch" id="modeSwitch"><button data-m="video" class="on">🎬 Video</button><button data-m="photo">🖼️ Photo</button></div>
     <div class="title-wrap"><input id="projectName" class="project-name" spellcheck="false" value="Untitled project"><span id="saveState" class="save-state">Saved</span></div>
     <div class="top-right">
       <div id="collabAvatars" style="display:flex;align-items:center;padding-left:6px"></div>
@@ -132,6 +133,16 @@
   </section>
 </div>
 
+<section class="photo-ws" id="photoWs">
+  <div class="ph-opts" id="phOpts"></div>
+  <nav class="ph-tools" id="phTools"></nav>
+  <div class="ph-view" id="phView"><canvas id="phCv"></canvas><canvas id="phOv"></canvas><div class="ph-empty" id="phEmpty"></div></div>
+  <aside class="ph-side">
+    <div class="ph-side-top"><div class="tabs" id="phSideTabs"><button class="tab on" data-t="props">Properties</button><button class="tab" data-t="history">History</button></div><div class="ph-props" id="phProps"></div></div>
+    <div class="ph-layers" id="phLayers"></div>
+  </aside>
+  <div class="ph-status" id="phStatus"></div>
+</section>
 <div class="modal-backdrop" id="modalBackdrop"><div class="modal" id="modal"></div></div>
 <div class="ctx-menu" id="ctxMenu"></div>
 <div class="toasts" id="toasts"></div>
@@ -142,6 +153,8 @@
 <script src="js/keyframes.js"></script>
 <script src="js/media.js"></script>
 <script src="js/render.js"></script>
+<script src="js/grade.js"></script>
+<script src="js/textfx.js"></script>
 <script src="js/effects.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/timeline.js"></script>
@@ -151,10 +164,15 @@
 <script src="js/export.js"></script>
 <script src="js/collab.js"></script>
 <script src="js/presets.js"></script>
+<script src="js/colorui.js"></script>
+<script src="js/kfeditor.js"></script>
 <script src="js/emoji.js"></script>
 <script src="js/record.js"></script>
 <script src="js/home.js"></script>
 <script src="js/palette.js"></script>
+<script src="js/photo-core.js"></script>
+<script src="js/photo-ui.js"></script>
+<script src="js/photo-panels.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -10,6 +10,10 @@ const { Readable } = require('stream');
 
 const APP_DIR = path.join(__dirname, '..', 'app');
 
+// Make WebGL (used for color grading) available even on GPUs Chromium blocklists
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
 ]);
@@ -448,7 +452,7 @@ ipcMain.handle('share:saveDialog', async (_e, name) => {
   return r.canceled ? null : r.filePath;
 });
 ipcMain.handle('share:openDialog', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Open project or package', properties: ['openFile'], filters: [{ name: 'Cutroom projects', extensions: ['cutroom', 'cutroompack'] }] });
+  const r = await dialog.showOpenDialog(win, { title: 'Open project or package', properties: ['openFile'], filters: [{ name: 'Cutroom projects', extensions: ['cutroom', 'cutroompack', 'cutphoto'] }] });
   return r.canceled ? null : r.filePaths[0];
 });
 ipcMain.handle('share:unpack', async (e, pkgPath) => {
@@ -459,7 +463,7 @@ ipcMain.handle('share:unpack', async (e, pkgPath) => {
 
 // ---------- Open files passed on the command line / file association ----------
 function fileFromArgv(argv) {
-  return argv.slice(1).find((a) => /\.(cutroom|cutroompack)$/i.test(a) && fs.existsSync(a)) || null;
+  return argv.slice(1).find((a) => /\.(cutroom|cutroompack|cutphoto)$/i.test(a) && fs.existsSync(a)) || null;
 }
 let pendingOpen = fileFromArgv(process.argv);
 app.on('second-instance', (_e, argv) => { const f = fileFromArgv(argv); if (f) sendToWin('app:openFile', f); });
@@ -554,3 +558,27 @@ app.whenReady().then(() => {
 const recentsFile = () => path.join(userDir(), 'recents.json');
 ipcMain.handle('recents:load', async () => { try { return JSON.parse(await fsp.readFile(recentsFile(), 'utf8')); } catch (_) { return []; } });
 ipcMain.handle('recents:save', async (_e, list) => { await fsp.mkdir(userDir(), { recursive: true }); await fsp.writeFile(recentsFile(), JSON.stringify(list.slice(0, 24)), 'utf8'); return true; });
+
+// ---------- LUT files ----------
+ipcMain.handle('lut:open', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Load a LUT', properties: ['openFile'], filters: [{ name: '3D LUT (.cube)', extensions: ['cube'] }] });
+  return r.canceled ? null : r.filePaths[0];
+});
+
+// ---------- Photo editor files ----------
+ipcMain.handle('photo:openDialog', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Open photo project', properties: ['openFile'], filters: [{ name: 'Cutroom photo project', extensions: ['cutphoto'] }] });
+  return r.canceled ? null : r.filePaths[0];
+});
+ipcMain.handle('photo:saveDialog', async (_e, name) => {
+  const r = await dialog.showSaveDialog(win, { title: 'Save photo project', defaultPath: path.join(app.getPath('documents'), (name || 'Untitled') + '.cutphoto'), filters: [{ name: 'Cutroom photo project', extensions: ['cutphoto'] }] });
+  return r.canceled ? null : r.filePath;
+});
+ipcMain.handle('photo:autoPath', async (_e, name) => {
+  const dir = path.join(app.getPath('pictures') || app.getPath('documents'), 'Cutroom Images');
+  await fsp.mkdir(dir, { recursive: true });
+  const base = String(name || 'Image').replace(/[\\/:*?"<>|]+/g, '_');
+  let out = path.join(dir, base + '.png');
+  for (let i = 2; fs.existsSync(out); i++) out = path.join(dir, `${base} ${i}.png`);
+  return out;
+});

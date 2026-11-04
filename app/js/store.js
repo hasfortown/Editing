@@ -14,6 +14,7 @@
   C.defaultText = () => ({
     content: 'Your text here', font: 'Segoe UI', size: 96, color: '#ffffff', bold: true, italic: false, align: 'center',
     strokeColor: '#000000', strokeWidth: 0, shadow: 0.4, bg: '#000000', bgOpacity: 0, lineHeight: 1.15, letterSpacing: 0, uppercase: false,
+    ...(C.textFX ? C.deep(C.textFX.DEFAULTS) : {}),
   });
 
   C.newProject = (name = 'Untitled project') => {

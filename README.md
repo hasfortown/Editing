@@ -9,6 +9,29 @@ A fast, clean multi-track video editor for Windows. It has a modern dark interfa
 3. Follow the setup wizard. It installs only for your user, so no admin rights are needed, and it adds Start Menu and desktop shortcuts.
 4. To uninstall, go to **Settings → Apps → Cutroom → Uninstall**.
 
+## What's new in 1.2
+
+- **Photo editor:** a Photoshop-style image editor built into the same app. Switch with **🎬 Video / 🖼️ Photo** at the top, or pick either editor from the home page.
+  - Layers: pixel, text, shape, fill, and non-destructive adjustment layers, with masks, blend modes, opacity, locking, drag reordering, and merge/flatten.
+  - Tools: move/transform, marquee, lasso, magic wand, crop, eyedropper, brush, eraser, clone stamp, dodge/burn/blur/sharpen/sponge, paint bucket, gradient, text, shapes, hand, and zoom.
+  - **Layer styles:** drop shadow, inner shadow, outer and inner glow, bevel & emboss, stroke, and color and gradient overlay.
+  - Adjustments: levels, curves, brightness/contrast, hue/saturation, color balance, vibrance, exposure, black & white, photo filter, invert, posterize, threshold, gradient map, and color looks.
+  - Every video effect is also available as a photo filter. You also get history, copy/paste (including from other apps), canvas and image size, rotate and flip, and PNG/JPG/WebP export.
+  - Save as `.cutphoto`. **Send to video** puts the image on your timeline, and **Edit current video frame** opens a frame in the photo editor.
+- **Color correction:** a GPU-accelerated Color tab.
+  - Exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, hue, and black & white.
+  - **Color wheels** for shadows, midtones, and highlights, an RGB and per-channel **curves** editor, and an **HSL** tool for adjusting one color at a time.
+  - Sharpen, matte fade, **.cube LUT** import, 13 looks, copy/paste grade, and a hold-to-compare button. Effect clips can carry a grade, so they act as adjustment layers.
+- **Better keyframing:** a new Keyframes tab.
+  - 35 **animation templates** (in, out, whole clip, loop, and audio).
+  - Per-property lanes with draggable keyframes and a **value graph** where you can drag points in time and value.
+  - Copy/paste keyframes, and save templates to export or import as `.cutkf`.
+  - New easings: smooth, expo, overshoot, bounce, and elastic.
+- **Text effects:**
+  - Letter-by-letter animations (pop, rise, drop, wave, spin, flip, elastic, blur, scramble/decode, typewriter) and loops (wave, bounce, jiggle, pulse, rainbow, neon flicker, shake, glow pulse).
+  - Gradient fills, glow, 3D extrusion, curved text, a second outline, and highlighter backgrounds, plus 14 animated text styles.
+- **Home page:** big **Video editor** and **Photo editor** cards, each with its own quick-start sizes, and recent video and photo projects together.
+
 ## What's new in 1.1
 
 - **Effects:** about 30 base effects across blur & distort, motion, color, retro, light, stylize, overlays, and green screen.

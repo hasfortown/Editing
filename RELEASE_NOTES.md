@@ -1,16 +1,13 @@
 ## Download
-Click **Cutroom-Setup-1.1.0.exe** under *Assets* below, then run it.
-If Windows SmartScreen says "Windows protected your PC", click **More info → Run anyway**. The app is safe; it just isn't code-signed.
+Click **Cutroom-Setup-1.2.0.exe** under *Assets* below, then run it. It updates your existing install.
+If Windows SmartScreen says "Windows protected your PC", click **More info → Run anyway**.
 
-## What's new in 1.1
-- **Effects:** about 30 new base effects, including glitch, VHS, glow, RGB split, mosaic, blur, wave, kaleidoscope, light leaks, beat zoom, camera shake, particles (snow, confetti, hearts, emoji…), green screen, duotone, sketch, cinema bars, rounded frames, and drop shadows.
-- **Effect positioning:** drag a box, ellipse, or center point on the player to choose where an effect applies.
-- **Keyframes on everything:** click ◆ on any slider. Easing is per keyframe, and you can drag the diamonds on the timeline.
-- **Effect Studio:** build effect stacks with a live preview, save them as presets, and **export or import `.cutfx` preset files** to share with friends.
-- **Effect clips:** put effects on their own track so they affect everything underneath.
-- **Stickers & emoji:** a searchable emoji library, plus emoji in text and particles.
-- **Home screen** with animation, quick-start formats (YouTube, TikTok, Instagram…), and recent projects.
-- **Voice-over recording** with a level meter and countdown, recorded while the video plays.
-- **Collaborate with a join code.** Everyone enters their name, so you can see who's who.
-- **Layers & selection:** blend modes, grouping, Shift-click range select, Alt-drag duplicate, label colors, rename, and track reordering and heights.
-- **Quality of life:** command palette (Ctrl+K), in/out range export and looping, an audio meter, hover-scrubbing media, and a shortcut sheet (?).
+## What's new in 1.2
+- **🖼️ Photo editor built in:** pick it from the home page or switch with **Video / Photo** at the top.
+  - Layers, masks, blend modes, and adjustment layers.
+  - Brush, eraser, clone stamp, dodge/burn/blur/sharpen/sponge, bucket, gradient, marquee/lasso/magic wand, crop, text, and shapes.
+- **Photoshop-style layer styles:** drop shadow, inner shadow, outer and inner glow, bevel & emboss, stroke, and color and gradient overlay.
+- **Pro color correction:** light and color sliders, **color wheels**, **curves**, **HSL**, **.cube LUTs**, 13 looks, copy/paste grade, and hold-to-compare.
+- **Keyframing upgrade:** 35 one-click **animation templates**, a keyframe editor with a **value graph**, more easing types (bounce, elastic, overshoot…), and save/share templates.
+- **Text effects:** letter-by-letter animations, looping animations, gradients, glow, 3D text, curved text, and 14 animated text styles.
+- **Video ⇄ photo:** edit any video frame or image clip in the photo editor and send finished images straight to the timeline.
