@@ -15,7 +15,8 @@
   "devDependencies": {
     "electron": "^45.2.2",
     "electron-builder": "^26.18.0",
-    "resedit": "^3.1.0"
+    "resedit": "^3.1.0",
+    "three": "^0.187.0"
   },
   "dependencies": {
     "ws": "^8.22.1",

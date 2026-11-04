@@ -25,6 +25,8 @@
     A.fit(); A.changed(true);
   };
   A.addDrawLayer = (name) => { const L = { id: newId(), name: name || `Drawing ${A.doc.layers.filter((l) => l.type === 'draw').length + 1}`, type: 'draw', visible: true, locked: false, opacity: 1, cells: {} }; A.doc.layers.push(L); A.doc.active = L.id; return L; };
+  A.add3DLayer = (name) => { const L = { id: newId(), name: name || '3D scene', type: '3d', visible: true, locked: false, opacity: 1, scene: C.anim3d.newLayerData() }; A.doc.layers.push(L); A.doc.active = L.id; A.sel = null; return L; };
+  A.new3D = async (withMannequin = true) => { if (!C.anim3d) return C.toast('3D is still loading — try again in a second', 'info'); const L = A.act('New 3D layer', () => A.add3DLayer()); if (withMannequin) await C.anim3d.addModel(L, 'builtin:mannequin'); A.changed(true); return L; };
   A.addObject = (obj, name) => {
     const d = A.doc; const L = { id: newId(), name: name || obj.text || obj.kind, type: 'obj', visible: true, locked: false, opacity: 1, obj, base: { x: d.w / 2, y: d.h / 2, scale: 1, rot: 0, opacity: 1 }, kf: {}, from: 0, to: d.length - 1 };
     d.layers.push(L); d.active = L.id; A.sel = L.id; loadObj(L); return L;
@@ -68,14 +70,15 @@
     for (const L of d.layers) {
       if (!L.visible) continue;
       if (L.type === 'draw') { const c = A.cellAt(L, f); if (c) { x.globalAlpha = L.opacity; x.drawImage(c, 0, 0); x.globalAlpha = 1; } }
+      else if (L.type === '3d') { if (C.anim3d) { x.globalAlpha = L.opacity; x.drawImage(C.anim3d.render(L, f, d.w, d.h), 0, 0, d.w, d.h); x.globalAlpha = 1; } }
       else drawObj(x, L, f);
     }
     x.restore();
   };
 
   // ================= history =================
-  const snap = () => ({ length: A.doc.length, w: A.doc.w, h: A.doc.h, fps: A.doc.fps, bg: A.doc.bg, layers: A.doc.layers.map((L) => Object.assign({}, L, { cells: L.cells ? Object.assign({}, L.cells) : undefined, kf: L.kf ? JSON.parse(JSON.stringify(L.kf)) : undefined, base: L.base ? Object.assign({}, L.base) : undefined, obj: L.obj ? Object.assign({}, L.obj) : undefined })), active: A.doc.active });
-  const restore = (s) => { const imgs = new Map(A.doc.layers.map((l) => [l.id, l._img])); Object.assign(A.doc, { length: s.length, w: s.w, h: s.h, fps: s.fps, bg: s.bg, active: s.active }); A.doc.layers = s.layers.map((L) => Object.assign({}, L, { cells: L.cells ? Object.assign({}, L.cells) : undefined, kf: L.kf ? JSON.parse(JSON.stringify(L.kf)) : undefined, base: L.base ? Object.assign({}, L.base) : undefined, obj: L.obj ? Object.assign({}, L.obj) : undefined, _img: imgs.get(L.id) || L._img })); A.doc.layers.forEach((L) => L.type === 'obj' && loadObj(L)); };
+  const snap = () => ({ audio: A.doc.audio ? Object.assign({}, A.doc.audio) : null, length: A.doc.length, w: A.doc.w, h: A.doc.h, fps: A.doc.fps, bg: A.doc.bg, layers: A.doc.layers.map((L) => Object.assign({}, L, { cells: L.cells ? Object.assign({}, L.cells) : undefined, kf: L.kf ? JSON.parse(JSON.stringify(L.kf)) : undefined, base: L.base ? Object.assign({}, L.base) : undefined, obj: L.obj ? Object.assign({}, L.obj) : undefined, scene: L.scene ? JSON.parse(JSON.stringify(L.scene)) : undefined })), active: A.doc.active });
+  const restore = (s) => { const imgs = new Map(A.doc.layers.map((l) => [l.id, l._img])); Object.assign(A.doc, { audio: s.audio, length: s.length, w: s.w, h: s.h, fps: s.fps, bg: s.bg, active: s.active }); A.doc.layers = s.layers.map((L) => Object.assign({}, L, { cells: L.cells ? Object.assign({}, L.cells) : undefined, kf: L.kf ? JSON.parse(JSON.stringify(L.kf)) : undefined, base: L.base ? Object.assign({}, L.base) : undefined, obj: L.obj ? Object.assign({}, L.obj) : undefined, scene: L.scene ? JSON.parse(JSON.stringify(L.scene)) : undefined, _img: imgs.get(L.id) || L._img })); A.doc.layers.forEach((L) => { if (L.type === 'obj') loadObj(L); if (L.type === '3d' && C.anim3d) { C.anim3d.sync(L); C.anim3d.invalidate(); } }); };
   A.act = (label, fn) => { const before = snap(); const r = fn(); A.undo.push({ label, s: before }); if (A.undo.length > 80) A.undo.shift(); A.redo = []; A.dirty = true; A.changed(true); return r; };
   A.doUndo = () => { const u = A.undo.pop(); if (!u) return; A.redo.push({ label: u.label, s: snap() }); restore(u.s); A.changed(true); };
   A.doRedo = () => { const r = A.redo.pop(); if (!r) return; A.undo.push({ label: r.label, s: snap() }); restore(r.s); A.changed(true); };
@@ -108,7 +111,7 @@
   function loop() {
     raf = requestAnimationFrame(loop);
     if (C.mode !== 'anim') return;
-    if (A.playing) { const now = performance.now(); if (now - A._lastTick >= 1000 / A.doc.fps) { A._lastTick = now; A.doc.cur = A.doc.cur + 1 >= A.doc.length ? (A.loop === false ? (A.stop(), A.doc.cur) : 0) : A.doc.cur + 1; needs = true; updatePlayhead(); } }
+    if (A.playing) { const now = performance.now(); if (now - A._lastTick >= 1000 / A.doc.fps) { A._lastTick += 1000 / A.doc.fps; if (now - A._lastTick > 250) A._lastTick = now; const wrap = A.doc.cur + 1 >= A.doc.length; A.doc.cur = wrap ? (A.loop === false ? (A.stop(), A.doc.cur) : 0) : A.doc.cur + 1; if ((wrap || (snd && snd._wait && A.doc.cur / A.doc.fps >= (A.doc.audio && A.doc.audio.offset || 0))) && A.playing) soundSync(true); needs = true; updatePlayhead(); } }
     if (!needs) return; needs = false; draw();
   }
   function draw() {
@@ -118,15 +121,18 @@
     cx.shadowColor = 'rgba(0,0,0,.45)'; cx.shadowBlur = 30 / A.zoom; cx.fillStyle = d.bg || '#fff'; cx.fillRect(0, 0, d.w, d.h); cx.shadowColor = 'transparent'; cx.shadowBlur = 0;
     if (!d.bg) { cx.fillStyle = '#e8e8ec'; for (let y = 0; y < d.h; y += 32) for (let x = (y / 32) % 2 ? 32 : 0; x < d.w; x += 64) cx.fillRect(x, y, 32, 32); }
     cx.save(); cx.beginPath(); cx.rect(0, 0, d.w, d.h); cx.clip();
+    const act = A.layer(); const edit3d = act && act.type === '3d' && act.visible && !A.playing && C.anim3d ? act : null;
     for (const L of d.layers) {
       if (!L.visible) continue;
+      if (L.type === '3d') { if (L !== edit3d && C.anim3d) { cx.globalAlpha = L.opacity; cx.drawImage(C.anim3d.render(L, d.cur, d.w, d.h), 0, 0, d.w, d.h); cx.globalAlpha = 1; } continue; }
       if (L.type === 'draw') {
-        if (A.onion && !A.playing && L.id === d.active) for (const [off, tint, a] of [[-2, '#ff3b5c', 0.12], [-1, '#ff3b5c', 0.28], [1, '#19c37d', 0.28], [2, '#19c37d', 0.12]]) { const f = d.cur + off; if (f < 0 || f >= d.length) continue; const c = A.cellAt(L, f); if (!c || c === A.cellAt(L, d.cur)) continue; cx.globalAlpha = a; cx.drawImage(tinted(c, tint), 0, 0); cx.globalAlpha = 1; }
+        if (A.onion && !A.playing && L.id === d.active) for (const [off, tint, a] of onionList()) { const f = d.cur + off; if (f < 0 || f >= d.length) continue; const c = A.cellAt(L, f); if (!c || c === A.cellAt(L, d.cur)) continue; cx.globalAlpha = a; cx.drawImage(tinted(c, tint), 0, 0); cx.globalAlpha = 1; }
         const c = A.cellAt(L, d.cur); if (c) { cx.globalAlpha = L.opacity; cx.drawImage(c, 0, 0); cx.globalAlpha = 1; }
         if (stroke && stroke.L === L) { cx.globalAlpha = stroke.erase ? 1 : A.opts.opacity / 100; if (stroke.erase) { cx.globalAlpha = 0.5; } cx.drawImage(stroke.cv, 0, 0); cx.globalAlpha = 1; }
       } else drawObj(cx, L, d.cur);
     }
     cx.restore();
+    if (C.anim3d) C.anim3d.edit(edit3d, view, { x: A.ox, y: A.oy, w: d.w * A.zoom, h: d.h * A.zoom }, d.cur);
     // overlay: selection handles, brush cursor, shape preview, motion path
     ox.setTransform(dpr, 0, 0, dpr, 0, 0);
     const S = (x, y) => [A.ox + x * A.zoom, A.oy + y * A.zoom];
@@ -144,6 +150,8 @@
     if (shapeDrag) { ox.strokeStyle = A.opts.color; ox.lineWidth = Math.max(1, A.opts.size * A.zoom); ox.beginPath(); const [a, b] = S(shapeDrag.a.x, shapeDrag.a.y), [c2, d2] = S(shapeDrag.b.x, shapeDrag.b.y); if (A.tool === 'line') { ox.moveTo(a, b); ox.lineTo(c2, d2); } else if (A.tool === 'rect') ox.rect(a, b, c2 - a, d2 - b); else ox.ellipse((a + c2) / 2, (b + d2) / 2, Math.abs(c2 - a) / 2, Math.abs(d2 - b) / 2, 0, 0, 6.283); ox.stroke(); }
     if (hover && ['brush', 'pencil', 'eraser'].includes(A.tool) && !A.playing) { const [a, b] = S(hover.x, hover.y); ox.strokeStyle = 'rgba(0,0,0,.6)'; ox.lineWidth = 2.5; ox.beginPath(); ox.arc(a, b, Math.max(2, (A.opts.size * A.zoom) / 2), 0, 6.283); ox.stroke(); ox.strokeStyle = '#fff'; ox.lineWidth = 1; ox.stroke(); }
   }
+  A.onionRange = 2; try { A.onionRange = +localStorage.getItem('cutroom.onion') || 2; } catch (_) {}
+  const onionList = () => { const n = A.onionRange || 2, out = []; for (let i = n; i >= 1; i--) { const a = 0.34 * Math.pow(0.62, i - 1); out.push([-i, '#ff3b5c', a], [i, '#19c37d', a]); } return out; };
   const tintCache = new WeakMap();
   function tinted(c, col) { let m = tintCache.get(c); if (!m) { m = {}; tintCache.set(c, m); } if (m[col]) return m[col]; const t = clone(c); const x = t.getContext('2d'); x.globalCompositeOperation = 'source-in'; x.fillStyle = col; x.fillRect(0, 0, t.width, t.height); m[col] = t; return t; }
 
@@ -168,7 +176,7 @@
     if (['line', 'rect', 'ellipse'].includes(A.tool)) { range('size', 'Line width', 1, 100, 'px'); if (A.tool !== 'line') chk('fillShapes', 'Filled'); }
     if (A.tool === 'fill') range('tol', 'Tolerance', 0, 120);
     if (['brush', 'pencil', 'eraser', 'line', 'rect', 'ellipse', 'fill'].includes(A.tool)) chk('autoFrame', 'Draw on a new frame', A);
-    if (A.tool === 'select') { chk('autoKey', 'Auto keyframe (moving makes a keyframe)', A); optsBar.appendChild(C.h('<div class="ph-opt"><span class="hint">Drag objects · corners scale · top handle rotates</span></div>')); }
+    if (A.tool === 'select') { chk('autoKey', 'Auto keyframe (moving makes a keyframe)', A); optsBar.appendChild(C.h('<div class="ph-opt"><span class="hint">Drag objects · corners scale · top handle rotates · drag empty space to move the whole drawing</span></div>')); }
     if (A.tool === 'text') optsBar.appendChild(C.h('<div class="ph-opt"><span class="hint">Click the stage to add a text object, then edit it in Properties</span></div>'));
   }
   A.autoKey = true;
@@ -217,6 +225,13 @@
       if (H.cs.some(([a, b]) => Math.hypot(sp[0] - a, sp[1] - b) < 9)) { const d0 = Math.hypot(sp[0] - H.c[0], sp[1] - H.c[1]); return withAct('Scale', (m) => { const dd = Math.hypot(m.clientX - r.left - H.c[0], m.clientY - r.top - H.c[1]); A.setProp(L0, 'scale', Math.max(0.05, (s0.scale * dd) / d0)); }); }
     }
     const L = hitObj(p);
+    const AL = A.layer();
+    if (!L && AL && AL.type === 'draw' && !AL.locked && A.cellAt(AL, d.cur)) {
+      const before = snap(); const k = A.keyAt(AL, d.cur); const src = AL.cells[k]; let moved = false; const dragCv = mk(d.w, d.h);
+      AL.cells[k] = dragCv;
+      drag((m) => { moved = true; const q = toDoc(m); const x = dragCv.getContext('2d'); x.clearRect(0, 0, d.w, d.h); x.drawImage(src, Math.round(q.x - p.x), Math.round(q.y - p.y)); needs = true; }, () => { if (!moved) { AL.cells[k] = src; return; } A.undo.push({ label: 'Move drawing', s: before }); A.redo = []; A.dirty = true; A.changed(true); });
+      const x0 = dragCv.getContext('2d'); x0.drawImage(src, 0, 0); return;
+    }
     if (!L) { A.sel = null; renderSide(); needs = true; return; }
     A.sel = L.id; A.doc.active = L.id; renderSide(); renderTimeline();
     const s = A.state(L, d.cur);
@@ -240,14 +255,26 @@
 
   // ================= frames & layers =================
   A.go = (f) => { if (!A.doc) return; A.doc.cur = C.clamp(Math.round(f), 0, A.doc.length - 1); needs = true; updatePlayhead(); renderSideValues(); };
-  A.play = () => { if (!A.doc) return; A.playing = true; A._lastTick = performance.now(); renderTimeline(); };
-  A.stop = () => { A.playing = false; renderTimeline(); needs = true; };
+  let snd = null;
+  const soundSync = (play) => { const d = A.doc; if (!d || !d.audio) { if (snd) { snd.pause(); } return; } if (!snd || snd._p !== d.audio.path) { snd = new Audio(N.mediaUrl(d.audio.path)); snd._p = d.audio.path; } if (!play) return snd.pause(); const t = d.cur / d.fps - (d.audio.offset || 0); if (t < 0) { snd.pause(); snd._wait = true; return; } snd._wait = false; snd.volume = d.audio.volume ?? 1; snd.currentTime = t; snd.play().catch(() => {}); };
+  A.play = () => { if (!A.doc) return; A.playing = true; A._lastTick = performance.now(); soundSync(true); renderTimeline(); };
+  A.stop = () => { A.playing = false; soundSync(false); renderTimeline(); needs = true; };
   A.toggle = () => (A.playing ? A.stop() : A.play());
-  A.insertFrame = () => A.act('Insert frame', () => { const d = A.doc, f = d.cur; d.length++; for (const L of d.layers) { if (L.type === 'draw') { const nc = {}; for (const k in L.cells) nc[+k > f ? +k + 1 : k] = L.cells[k]; L.cells = nc; } else { for (const arr of Object.values(L.kf)) for (const k of arr) if (k.f > f) k.f++; if (L.to >= f) L.to++; } } });
-  A.deleteFrame = () => A.act('Delete frame', () => { const d = A.doc, f = d.cur; if (d.length <= 1) return; d.length--; for (const L of d.layers) { if (L.type === 'draw') { const nc = {}; for (const k in L.cells) { const n = +k; if (n === f) continue; nc[n > f ? n - 1 : n] = L.cells[k]; } L.cells = nc; } else { for (const p in L.kf) { L.kf[p] = L.kf[p].filter((k) => k.f !== f); L.kf[p].forEach((k) => { if (k.f > f) k.f--; }); } if (L.to > f) L.to--; } } d.cur = Math.min(d.cur, d.length - 1); });
-  A.keyframe = (blank) => A.act(blank ? 'Blank keyframe' : 'Keyframe', () => { const L = A.layer(); const d = A.doc; if (!L) return; if (L.type === 'draw') { const c = A.cellAt(L, d.cur); L.cells[d.cur] = blank || !c ? mk(d.w, d.h) : clone(c); } else { const s = A.state(L, d.cur); for (const [p] of PROPS) A.setKey(L, p, d.cur, s[p]); } });
+  const shift3d = (L, fn) => { const sc = L.scene; const all = [sc.cam.kf]; for (const m of sc.models) { all.push(m.kf || []); for (const a of Object.values(m.pose || {})) all.push(a); for (const a of Object.values(m.posePos || {})) all.push(a); } for (const arr of all) { const keep = arr.filter((k) => fn(k) !== false); arr.length = 0; arr.push(...keep); } };
+  A.insertFrame = () => A.act('Insert frame', () => { const d = A.doc, f = d.cur; d.length++; for (const L of d.layers) { if (L.type === '3d') { shift3d(L, (k) => { if (k.f > f) k.f++; }); continue; } if (L.type === 'draw') { const nc = {}; for (const k in L.cells) nc[+k > f ? +k + 1 : k] = L.cells[k]; L.cells = nc; } else { for (const arr of Object.values(L.kf)) for (const k of arr) if (k.f > f) k.f++; if (L.to >= f) L.to++; } } });
+  A.deleteFrame = () => A.act('Delete frame', () => { const d = A.doc, f = d.cur; if (d.length <= 1) return; d.length--; for (const L of d.layers) { if (L.type === '3d') { shift3d(L, (k) => { if (k.f === f) return false; if (k.f > f) k.f--; }); continue; } if (L.type === 'draw') { const nc = {}; for (const k in L.cells) { const n = +k; if (n === f) continue; nc[n > f ? n - 1 : n] = L.cells[k]; } L.cells = nc; } else { for (const p in L.kf) { L.kf[p] = L.kf[p].filter((k) => k.f !== f); L.kf[p].forEach((k) => { if (k.f > f) k.f--; }); } if (L.to > f) L.to--; } } d.cur = Math.min(d.cur, d.length - 1); });
+  A.keyframe = (blank) => { const L0 = A.layer(); if (L0 && L0.type === '3d') { const s = C.anim3d && C.anim3d.editState(); if (s && s.sel) C.anim3d.keyPose(L0, s.sel.model); else C.toast('Click a 3D model first', 'info'); return; } return A.keyframe2(blank); };
+  A.keyframe2 = (blank) => A.act(blank ? 'Blank keyframe' : 'Keyframe', () => { const L = A.layer(); const d = A.doc; if (!L) return; if (L.type === 'draw') { const c = A.cellAt(L, d.cur); L.cells[d.cur] = blank || !c ? mk(d.w, d.h) : clone(c); } else { const s = A.state(L, d.cur); for (const [p] of PROPS) A.setKey(L, p, d.cur, s[p]); } });
   A.nextFrame = (add) => { const d = A.doc; if (!d) return; if (d.cur >= d.length - 1) { if (!add) return A.go(0); A.act('Add frame', () => { d.length++; }); } A.go(d.cur + 1); };
   A.duplicateFrameForward = () => { const d = A.doc; const L = A.layer(); if (!L || L.type !== 'draw') return; A.act('Copy to next frame', () => { if (d.cur >= d.length - 1) d.length++; const c = A.cellAt(L, d.cur); L.cells[d.cur + 1] = c ? clone(c) : mk(d.w, d.h); }); A.go(d.cur + 1); };
+  A.copyFrame = () => { const L = A.layer(); if (!L || L.type !== 'draw') return; const c = A.cellAt(L, A.doc.cur); A.clip = c ? clone(c) : null; C.toast(c ? 'Frame copied' : 'Empty frame copied', 'ok', 900); };
+  A.pasteFrame = () => { const L = A.layer(); if (!L || L.type !== 'draw' || A.clip === undefined) return; A.act('Paste frame', () => { L.cells[A.doc.cur] = A.clip ? clone(A.clip) : null; }); };
+  A.moveKey = (L, from, to) => A.act('Move keyframe', () => {
+    if (L.type === 'draw') { if (!(from in L.cells)) return; const c = L.cells[from]; delete L.cells[from]; L.cells[to] = c; }
+    else if (L.type === 'obj') { for (const arr of Object.values(L.kf)) { if (arr.some((k) => k.f === to)) continue; const k = arr.find((x) => x.f === from); if (k) k.f = to; arr.sort((a, b) => a.f - b.f); } }
+    else if (L.type === '3d') { const sc = L.scene; const all = [sc.cam.kf]; for (const m of sc.models) { all.push(m.kf || []); for (const a of Object.values(m.pose || {})) all.push(a); for (const a of Object.values(m.posePos || {})) all.push(a); } for (const arr of all) { if (arr.some((k) => k.f === to)) continue; const k = arr.find((x) => x.f === from); if (k) k.f = to; arr.sort((a, b) => a.f - b.f); } C.anim3d && C.anim3d.invalidate(); }
+    A.doc.cur = to;
+  });
   A.clearFrame = () => A.act('Clear frame', () => { const L = A.layer(); if (L && L.type === 'draw') L.cells[A.doc.cur] = mk(A.doc.w, A.doc.h); });
   A.removeLayer = (L = A.layer()) => { if (!L) return; A.act('Delete layer', () => { A.doc.layers = A.doc.layers.filter((x) => x.id !== L.id); A.doc.active = (A.doc.layers[A.doc.layers.length - 1] || {}).id; if (A.sel === L.id) A.sel = null; }); };
   A.moveLayer = (L, dir) => A.act('Reorder layers', () => { const a = A.doc.layers; const i = a.indexOf(L), j = i + dir; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; });
@@ -272,8 +299,10 @@
         <button class="btn ${A.loop !== false ? 'on' : ''}" data-a="loop" data-tip="Loop playback">${C.icon('refresh')}</button>
         <label class="atl-fps">FPS <select class="select compact" data-a="fps">${[6, 8, 12, 15, 24, 25, 30, 60].map((v) => `<option ${v === d.fps ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         <label class="atl-fps">Frames <input class="num" data-a="len" value="${d.length}"></label>
+        <label class="atl-fps" data-tip="How many frames before/after onion skin shows">Onion <select class="select compact" data-a="onionN">${[1, 2, 3, 4, 5].map((v) => `<option ${v === A.onionRange ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+        <button class="btn ${d.audio ? 'on' : ''}" data-a="sound" data-tip="${d.audio ? C.esc(C.baseName(d.audio.path)) + ' — click to change or remove' : 'Add music or voice — plays in sync and is included in exports'}">${C.icon('music')}<span>${d.audio ? 'Sound ✓' : 'Sound'}</span></button>
         <span style="flex:1"></span>
-        <button class="btn" data-a="addDraw">${C.icon('brush')}<span>+ Drawing</span></button><button class="btn" data-a="addObj">${C.icon('plus')}<span>+ Object</span></button>
+        <button class="btn" data-a="addDraw">${C.icon('brush')}<span>Drawing</span></button><button class="btn" data-a="addObj">${C.icon('plus')}<span>Object</span></button><button class="btn" data-a="add3d">${C.icon('cube')}<span>3D</span></button>
       </div>
       <div class="atl-body"><div class="atl-layers"></div><div class="atl-grid"><div class="atl-ruler"></div><div class="atl-rows"></div><div class="atl-head"></div></div></div>`;
     const bar = tl.querySelector('.atl-bar');
@@ -282,15 +311,18 @@
     on('key', () => A.keyframe(false)); on('blank', () => A.keyframe(true)); on('ins', A.insertFrame); on('del', A.deleteFrame);
     on('onion', () => { A.onion = !A.onion; renderTimeline(); needs = true; }); on('loop', () => { A.loop = A.loop === false; renderTimeline(); });
     bar.querySelector('[data-a=fps]').onchange = (e) => A.act('Frame rate', () => { d.fps = +e.target.value; });
+    bar.querySelector('[data-a=onionN]').onchange = (e) => { A.onionRange = +e.target.value; try { localStorage.setItem('cutroom.onion', A.onionRange); } catch (_) {} needs = true; };
+    on('sound', (e) => { const r = e.currentTarget.getBoundingClientRect(); const pick = async () => { const p = await N.fileOpenDialog({ title: 'Add sound to the animation', exts: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'mp4', 'mov'], extName: 'Audio' }); if (p) A.act('Add sound', () => { d.audio = { path: p, offset: 0, volume: 1 }; }); }; if (!d.audio) return pick(); C.menu(r.left, r.top - 8 - 36 * 3, [{ label: 'Change sound…', icon: 'music', action: pick }, { label: `Start sound at frame ${d.cur + 1}`, icon: 'split', action: () => A.act('Sound offset', () => { d.audio.offset = d.cur / d.fps; }) }, { label: 'Remove sound', icon: 'trash', action: () => A.act('Remove sound', () => { d.audio = null; }) }]); });
     const len = bar.querySelector('[data-a=len]'); len.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') len.blur(); }; len.onchange = () => A.setLength(+len.value || d.length);
     on('addDraw', () => A.act('New drawing layer', () => A.addDrawLayer()));
-    on('addObj', (e) => { const r = e.currentTarget.getBoundingClientRect(); C.menu(r.left, r.top - 8 - 36 * 7, objectMenu()); });
+    on('add3d', (e) => { const r = e.currentTarget.getBoundingClientRect(); C.menu(r.left, r.top - 8 - 36 * 2, [{ label: '3D scene with mannequin', icon: 'user', action: () => A.new3D(true) }, { label: 'Import rig / model (GLB, glTF, FBX, OBJ)…', icon: 'import', action: async () => { const L = await A.new3D(false); if (L) C.anim3d.importFile(L); } }]); });
+    on('addObj', (e) => { const r = e.currentTarget.getBoundingClientRect(); C.menu(r.left, r.top - 8 - 36 * 10, objectMenu()); });
     C.fillIcons(tl);
     const lay = tl.querySelector('.atl-layers'), rows = tl.querySelector('.atl-rows'), ruler = tl.querySelector('.atl-ruler');
     const width = d.length * CW; rows.style.width = ruler.style.width = width + 'px';
     ruler.innerHTML = Array.from({ length: d.length }, (_, i) => `<span style="left:${i * CW}px" class="${(i + 1) % 5 === 0 || i === 0 ? 'n' : ''}">${(i + 1) % 5 === 0 || i === 0 ? i + 1 : ''}</span>`).join('') + Array.from({ length: Math.floor(d.length / d.fps) + 1 }, (_, s) => `<i style="left:${s * d.fps * CW}px">${s}s</i>`).join('');
     [...d.layers].reverse().forEach((L) => {
-      const li = C.h(`<div class="atl-layer ${L.id === d.active ? 'on' : ''}" data-l="${L.id}"><span class="atl-ico">${C.icon(L.type === 'draw' ? 'brush' : L.obj.kind === 'text' ? 'text' : L.obj.kind === 'image' ? 'image' : L.obj.kind === 'emoji' ? 'smile' : 'shapes')}</span><span class="atl-name">${C.esc(L.name)}</span><button class="icon-btn" data-b="vis">${C.icon(L.visible ? 'eye' : 'eyeOff')}</button><button class="icon-btn" data-b="lock">${C.icon(L.locked ? 'lock' : 'unlock')}</button></div>`);
+      const li = C.h(`<div class="atl-layer ${L.id === d.active ? 'on' : ''}" data-l="${L.id}"><span class="atl-ico">${C.icon(L.type === 'draw' ? 'brush' : L.type === '3d' ? 'cube' : L.obj.kind === 'text' ? 'text' : L.obj.kind === 'image' ? 'image' : L.obj.kind === 'emoji' ? 'smile' : 'shapes')}</span><span class="atl-name">${C.esc(L.name)}</span><button class="icon-btn" data-b="vis">${C.icon(L.visible ? 'eye' : 'eyeOff')}</button><button class="icon-btn" data-b="lock">${C.icon(L.locked ? 'lock' : 'unlock')}</button></div>`);
       li.onclick = (e) => { const b = e.target.closest('[data-b]'); if (b) { A.act(b.dataset.b === 'vis' ? 'Toggle visibility' : 'Toggle lock', () => { if (b.dataset.b === 'vis') L.visible = !L.visible; else L.locked = !L.locked; }); return; } d.active = L.id; if (L.type === 'obj') A.sel = L.id; renderTimeline(); renderSide(); needs = true; };
       li.ondblclick = async () => { const v = await C.prompt('Rename layer', 'Name', L.name); if (v) A.act('Rename layer', () => { L.name = v; }); };
       li.oncontextmenu = (e) => { e.preventDefault(); C.menu(e.clientX, e.clientY, [{ label: 'Move up', icon: 'chevronDown', action: () => A.moveLayer(L, 1) }, { label: 'Move down', icon: 'chevronDown', action: () => A.moveLayer(L, -1) }, { label: 'Duplicate', icon: 'copy', action: () => A.act('Duplicate layer', () => { const c = Object.assign({}, L, { id: newId(), name: L.name + ' copy', cells: L.cells ? Object.assign({}, L.cells) : undefined, kf: L.kf ? JSON.parse(JSON.stringify(L.kf)) : undefined, base: L.base ? Object.assign({}, L.base) : undefined, obj: L.obj ? Object.assign({}, L.obj) : undefined }); A.doc.layers.splice(A.doc.layers.indexOf(L) + 1, 0, c); }) }, '-', { label: 'Delete layer', icon: 'trash', action: () => A.removeLayer(L) }]); };
@@ -301,7 +333,12 @@
     renderTimelineCells();
     const grid = tl.querySelector('.atl-grid');
     const pick = (e) => { const r = rows.getBoundingClientRect(); return C.clamp(Math.floor((e.clientX - r.left) / CW), 0, d.length - 1); };
-    grid.onpointerdown = (e) => { if (A.playing) A.stop(); const row = e.target.closest('.atl-row'); if (row) { d.active = row._L.id; if (row._L.type === 'obj') A.sel = row._L.id; } A.go(pick(e)); if (row) { renderSide(); C.$$('.atl-layer, .atl-row', tl).forEach((x) => x.classList.toggle('on', x.dataset.l === d.active)); }
+    grid.onpointerdown = (e) => { if (A.playing) A.stop();
+      const key = e.target.closest('.atl-key, .atl-diamond'); const rowEl = e.target.closest('.atl-row');
+      if (key && rowEl) { e.stopPropagation(); const L = rowEl._L; const from = Math.floor((key.getBoundingClientRect().left + 4 - rows.getBoundingClientRect().left) / CW); let to = from; const ghost = key.cloneNode(); ghost.classList.add('ghost'); rowEl.appendChild(ghost); const base = parseFloat(key.style.left || 0);
+        const mv = (m) => { to = pick(m); ghost.style.left = (key.classList.contains('atl-key') ? (to - from) * CW + 4 + base - 4 : to * CW + CW / 2 - 4) + 'px'; if (key.classList.contains('atl-key')) ghost.style.left = to * CW + 4 + 'px'; ghost.style.position = 'absolute'; ghost.style.top = key.classList.contains('atl-key') ? '10px' : ''; };
+        const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); ghost.remove(); if (to !== from) A.moveKey(L, from, to); else A.go(from); };
+        addEventListener('pointermove', mv); addEventListener('pointerup', up); return; } const row = e.target.closest('.atl-row'); if (row) { d.active = row._L.id; if (row._L.type === 'obj') A.sel = row._L.id; } A.go(pick(e)); if (row) { renderSide(); C.$$('.atl-layer, .atl-row', tl).forEach((x) => x.classList.toggle('on', x.dataset.l === d.active)); }
       const mv = (m) => A.go(pick(m)); const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); }; addEventListener('pointermove', mv); addEventListener('pointerup', up); };
     updatePlayhead();
   }
@@ -312,6 +349,9 @@
       if (L.type === 'draw') {
         const keys = Object.keys(L.cells).map(Number).sort((a, b) => a - b);
         keys.forEach((k, i) => { const end = i + 1 < keys.length ? keys[i + 1] : A.doc.length; const c = L.cells[k]; html += `<span class="atl-span ${c ? '' : 'blank'}" style="left:${k * CW}px;width:${(end - k) * CW - 1}px"><i class="atl-key ${c ? '' : 'empty'}"></i></span>`; });
+      } else if (L.type === '3d') {
+        html += `<span class="atl-span obj d3" style="left:0;width:${A.doc.length * CW - 1}px"></span>`;
+        if (C.anim3d) for (const f of C.anim3d.keyFrames(L)) html += `<i class="atl-diamond" style="left:${f * CW + CW / 2 - 4}px"></i>`;
       } else {
         html += `<span class="atl-span obj" style="left:${(L.from ?? 0) * CW}px;width:${((L.to ?? A.doc.length - 1) - (L.from ?? 0) + 1) * CW - 1}px"></span>`;
         const fs = new Set(); Object.values(L.kf).forEach((arr) => arr.forEach((k) => fs.add(k.f))); for (const f of fs) html += `<i class="atl-diamond" style="left:${f * CW + CW / 2 - 4}px"></i>`;
@@ -330,6 +370,8 @@
       { label: 'Star', icon: 'sparkles', action: () => add({ kind: 'shape', shape: 'star', w: A.doc.h / 4, h: A.doc.h / 4, fill: '#ffd84d' }, 'Star') },
       { label: 'Image file…', icon: 'image', action: async () => { const p = await N.fileOpenDialog({ title: 'Add an image', exts: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'], extName: 'Images' }); if (p) add({ kind: 'image', src: p }, C.baseName(p)); } },
       { label: 'Image from assets…', icon: 'bookmark', action: async () => { const a = await C.assets.pick(['image'], 'Add an image from your assets'); if (a) A.insertAsset(a); } },
+      '-', { label: '3D scene with mannequin', icon: 'cube', action: () => A.new3D(true) },
+      { label: '3D scene — import rig / model…', icon: 'import', action: async () => { const L = await A.new3D(false); if (L) C.anim3d.importFile(L); } },
     ];
   }
   A.insertAsset = (a) => { if (!A.doc) A.newDoc(); if (a.type !== 'image') return C.toast('Only image assets can be used in Animate', 'info'); A.act('Add asset', () => A.addObject({ kind: 'image', src: a.path }, a.name)); };
@@ -351,6 +393,7 @@
       box.querySelectorAll('input').forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); i.onchange = () => A.act('Scene', () => { const k = i.dataset.k; if (k === 'name') d.name = i.value; else if (k === 'bg') d.bg = i.value; else if (k === 'transp') d.bg = i.checked ? null : '#ffffff'; else if (k === 'w' || k === 'h') resizeDoc(k === 'w' ? +i.value : d.w, k === 'h' ? +i.value : d.h); }); });
       return;
     }
+    if (L.type === '3d') { if (C.anim3d) C.anim3d.panel(box, L); return; }
     if (L.type === 'draw') {
       box.innerHTML = `<div class="section-title">${C.icon('brush')} ${C.esc(L.name)}</div><p class="hint">Drawing layer · ${Object.keys(L.cells).length} drawings. Draw on the stage; use <b>Keyframe</b> (F6) to copy a frame forward, <b>Blank</b> (F7) for a fresh frame. “Draw on a new frame” in the toolbar makes every frame you draw on its own drawing.</p>
         <div class="form-row"><label>Opacity</label><input type="range" min="0" max="100" value="${Math.round(L.opacity * 100)}" data-k="op"></div>
@@ -416,14 +459,14 @@
     el.querySelectorAll('.aspect-card').forEach((b) => (b.onclick = async () => { if (!(await A.confirmDiscard())) return; const [n, w, h] = presets[+b.dataset.i]; close(); C.setMode('anim'); A.newDoc(w, h, +el.querySelector('#anFps').value, 'Animation', el.querySelector('#anBg').value || null); }));
   };
   A.confirmDiscard = async () => (!A.doc || !A.dirty ? true : C.confirm('Discard changes?', 'Your current animation has unsaved changes.', 'Discard', true));
-  A.serialize = () => { const d = A.doc; return JSON.stringify({ app: 'cutroom-anim', v: 1, name: d.name, w: d.w, h: d.h, fps: d.fps, bg: d.bg, length: d.length, layers: d.layers.map((L) => L.type === 'draw' ? { id: L.id, name: L.name, type: 'draw', visible: L.visible, locked: L.locked, opacity: L.opacity, cells: Object.fromEntries(Object.entries(L.cells).map(([k, c]) => [k, c ? c.toDataURL('image/png') : null])) } : { id: L.id, name: L.name, type: 'obj', visible: L.visible, locked: L.locked, opacity: L.opacity, obj: L.obj, base: L.base, kf: L.kf, from: L.from, to: L.to }) }); };
+  A.serialize = () => { const d = A.doc; return JSON.stringify({ app: 'cutroom-anim', v: 1, name: d.name, w: d.w, h: d.h, fps: d.fps, bg: d.bg, length: d.length, audio: d.audio || null, layers: d.layers.map((L) => L.type === 'draw' ? { id: L.id, name: L.name, type: 'draw', visible: L.visible, locked: L.locked, opacity: L.opacity, cells: Object.fromEntries(Object.entries(L.cells).map(([k, c]) => [k, c ? c.toDataURL('image/png') : null])) } : L.type === '3d' ? { id: L.id, name: L.name, type: '3d', visible: L.visible, locked: L.locked, opacity: L.opacity, scene: L.scene } : { id: L.id, name: L.name, type: 'obj', visible: L.visible, locked: L.locked, opacity: L.opacity, obj: L.obj, base: L.base, kf: L.kf, from: L.from, to: L.to }) }); };
   A.load = async (json, path) => {
     const j = JSON.parse(json); if (j.app !== 'cutroom-anim') throw new Error('Not a Cutroom animation');
     const loadImg = (src) => new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
     const layers = [];
     for (const L of j.layers) { if (L.type === 'draw') { const cells = {}; for (const [k, s] of Object.entries(L.cells)) { if (!s) { cells[k] = null; continue; } const img = await loadImg(s); const c = mk(j.w, j.h); if (img) c.getContext('2d').drawImage(img, 0, 0); cells[k] = c; } layers.push(Object.assign({}, L, { cells })); } else layers.push(Object.assign({}, L)); }
-    A.doc = { name: j.name, w: j.w, h: j.h, fps: j.fps, bg: j.bg, length: j.length, cur: 0, layers, active: (layers[layers.length - 1] || {}).id, path };
-    layers.forEach((L) => L.type === 'obj' && loadObj(L)); A.undo = []; A.redo = []; A.dirty = false; A._fitted = false; A.fit(); A.changed(true);
+    A.doc = { name: j.name, w: j.w, h: j.h, fps: j.fps, bg: j.bg, length: j.length, audio: j.audio || null, cur: 0, layers, active: (layers[layers.length - 1] || {}).id, path };
+    layers.forEach((L) => { if (L.type === 'obj') loadObj(L); if (L.type === '3d' && C.anim3d) C.anim3d.sync(L); }); A.undo = []; A.redo = []; A.dirty = false; A._fitted = false; A.fit(); A.changed(true);
   };
   A.save = async (as) => { if (!A.doc) return; let p = !as && A.doc.path; if (!p) p = await N.fileSaveDialog({ title: 'Save animation', name: A.doc.name, ext: 'cutanim', extName: 'Cutroom animation' }); if (!p) return; await N.writeText(p, A.serialize()); A.doc.path = p; A.dirty = false; C.toast('Animation saved', 'ok', 1400); const c = mk(320, 180); const x = c.getContext('2d'); x.scale(320 / A.doc.w, 180 / A.doc.h); A.renderFrame(x, Math.floor(A.doc.length / 2)); C.home.addRecent(p, A.doc.name, 'anim', c); };
   A.open = async (p) => { if (!(await A.confirmDiscard())) return; p = p || (await N.fileOpenDialog({ title: 'Open animation', exts: ['cutanim'], extName: 'Cutroom animation' })); if (!p) return; try { C.setMode('anim'); await A.load(await N.readText(p), p); } catch (e) { C.toast('Could not open: ' + e.message, 'err'); } };
@@ -440,7 +483,7 @@
     let fmt = 'mp4'; el.querySelectorAll('.exp-opt').forEach((b) => (b.onclick = () => { fmt = b.dataset.f; el.querySelectorAll('.exp-opt').forEach((x) => x.classList.toggle('on', x === b)); }));
     el.querySelector('#axGo').onclick = async () => { el.querySelector('#axGo').disabled = true; try { const r = await A.export(fmt, +el.querySelector('#axScale').value, +el.querySelector('#axLoops').value, (k, t) => { el.querySelector('.trk-bar i').style.width = Math.round(k * 100) + '%'; if (t) el.querySelector('.ax-status').textContent = t; }); close(); if (r && fmt !== 'video') C.toast('Exported ' + C.baseName(r), 'ok', 2500); if (r && fmt !== 'video') N.showItem(r); } catch (e) { el.querySelector('.ax-status').textContent = 'Export failed: ' + e.message; el.querySelector('#axGo').disabled = false; } };
   };
-  A.export = async (fmt, scale = 1, loops = 1, prog = () => {}) => {
+  A.export = async (fmt, scale = 1, loops = 1, prog = () => {}, outPath = null) => {
     const d = A.doc; const even = (v) => Math.max(2, Math.round(v / 2) * 2); const W = even(d.w * scale), H = even(d.h * scale);
     const c = mk(W, H); const x = c.getContext('2d', { willReadFrequently: true }); const total = d.length * loops;
     if (fmt === 'png') {
@@ -449,9 +492,10 @@
       return dir;
     }
     const ext = fmt === 'video' ? 'mp4' : fmt;
-    const out = fmt === 'video' ? await N.animAutoPath(d.name, 'mp4') : await N.fileSaveDialog({ title: 'Export animation', name: d.name, ext, extName: ext.toUpperCase(), dir: 'videos' });
+    const out = outPath || (fmt === 'video' ? await N.animAutoPath(d.name, 'mp4') : await N.fileSaveDialog({ title: 'Export animation', name: d.name, ext, extName: ext.toUpperCase(), dir: 'videos' }));
     if (!out) return null;
-    const r = await N.exportStart({ outPath: out, width: W, height: H, fps: d.fps, format: ext === 'mp4' ? 'mp4' : ext, quality: 'high', audio: { segments: [] }, duration: total / d.fps });
+    const segs = []; if (d.audio && ext !== 'gif') { const L1 = d.length / d.fps, off = d.audio.offset || 0; for (let l = 0; l < loops; l++) segs.push({ path: d.audio.path, in: 0, dur: Math.max(0.05, L1 - off), speed: 1, volume: d.audio.volume ?? 1, fadeIn: 0, fadeOut: 0.05, start: l * L1 + off }); }
+    const r = await N.exportStart({ outPath: out, width: W, height: H, fps: d.fps, format: ext === 'mp4' ? 'mp4' : ext, quality: 'high', audio: { segments: segs }, duration: total / d.fps });
     if (!r.ok) throw new Error(r.error || 'could not start the encoder');
     for (let i = 0; i < total; i++) { const f = i % d.length; x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = d.bg || '#ffffff'; x.fillRect(0, 0, W, H); A.renderFrame(x, f, { scale: W / d.w, transparent: !d.bg }); const img = x.getImageData(0, 0, W, H); await N.exportFrame(img.data.buffer); if (i % 3 === 0) prog((i + 1) / total, `Encoding frame ${i + 1} / ${total}`); }
     const fin = await N.exportFinish(); if (!fin.ok) throw new Error(fin.error || 'encoding failed');
@@ -471,7 +515,7 @@
       { label: 'Save current frame to assets', icon: 'bookmark', disabled: !A.doc, action: () => { const c = mk(A.doc.w, A.doc.h); A.renderFrame(c.getContext('2d'), A.doc.cur, { transparent: !A.doc.bg }); C.assets.saveImage(c, `${A.doc.name} frame ${A.doc.cur + 1}`, 'anim'); } },
       '-', { label: 'Home', icon: 'home', action: () => C.home.show() },
     ],
-    edit: () => [{ label: 'Undo', icon: 'undo', key: 'Ctrl+Z', disabled: !A.undo.length, action: A.doUndo }, { label: 'Redo', icon: 'redo', key: 'Ctrl+Y', disabled: !A.redo.length, action: A.doRedo }, '-', { label: 'Clear frame', icon: 'trash', disabled: !A.doc, action: A.clearFrame }],
+    edit: () => [{ label: 'Undo', icon: 'undo', key: 'Ctrl+Z', disabled: !A.undo.length, action: A.doUndo }, { label: 'Redo', icon: 'redo', key: 'Ctrl+Y', disabled: !A.redo.length, action: A.doRedo }, '-', { label: 'Copy frame', icon: 'copy', key: 'Ctrl+C', disabled: !A.doc, action: A.copyFrame }, { label: 'Paste frame', icon: 'copy', key: 'Ctrl+V', disabled: A.clip === undefined, action: A.pasteFrame }, { label: 'Clear frame', icon: 'trash', disabled: !A.doc, action: A.clearFrame }],
     frame: () => [
       { label: 'Next frame (add if at end)', icon: 'nextFrame', key: '.', action: () => A.nextFrame(true) }, { label: 'Previous frame', icon: 'prevFrame', key: ',', action: () => A.go(A.doc.cur - 1) },
       '-', { label: 'Keyframe (copy current)', icon: 'diamond', key: 'F6', action: () => A.keyframe(false) }, { label: 'Blank keyframe', icon: 'plus', key: 'F7', action: () => A.keyframe(true) },
@@ -479,11 +523,11 @@
       { label: 'Copy drawing to next frame', icon: 'copy', key: 'Ctrl+D', action: A.duplicateFrameForward },
       '-', { label: (A.onion ? '✓ ' : '') + 'Onion skin', icon: 'onion', key: 'O', action: () => { A.onion = !A.onion; renderTimeline(); needs = true; } },
     ].map((m) => (m === '-' ? m : Object.assign(m, { disabled: !A.doc }))),
-    layer: () => [{ label: 'New drawing layer', icon: 'brush', disabled: !A.doc, action: () => A.act('New drawing layer', () => A.addDrawLayer()) }, ...(A.doc ? objectMenu() : []), '-', { label: 'Delete layer', icon: 'trash', disabled: !A.layer(), action: () => A.removeLayer() }],
+    layer: () => [{ label: 'New drawing layer', icon: 'brush', disabled: !A.doc, action: () => A.act('New drawing layer', () => A.addDrawLayer()) }, { label: 'New 3D layer (mannequin)', icon: 'cube', disabled: !A.doc, action: () => A.new3D(true) }, { label: 'Import 3D rig / model…', icon: 'import', disabled: !A.doc, action: async () => { const L = A.layer() && A.layer().type === '3d' ? A.layer() : await A.new3D(false); if (L) C.anim3d.importFile(L); } }, ...(A.doc ? objectMenu() : []), '-', { label: 'Delete layer', icon: 'trash', disabled: !A.layer(), action: () => A.removeLayer() }],
   };
   A.key = (e) => {
     if (C.mode !== 'anim') return false; const ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
-    if (ctrl) { const map = { z: () => (e.shiftKey ? A.doRedo() : A.doUndo()), y: A.doRedo, s: () => A.save(e.shiftKey), o: () => A.open(), n: A.newDialog, e: A.exportDialog, d: A.duplicateFrameForward, '0': () => { A._fitted = false; A.fit(); }, '=': () => zoomAt(1.2), '+': () => zoomAt(1.2), '-': () => zoomAt(1 / 1.2), k: () => C.palette.open() }; if (map[k]) { e.preventDefault(); map[k](); return true; } return false; }
+    if (ctrl) { const map = { c: A.copyFrame, v: A.pasteFrame, z: () => (e.shiftKey ? A.doRedo() : A.doUndo()), y: A.doRedo, s: () => A.save(e.shiftKey), o: () => A.open(), n: A.newDialog, e: A.exportDialog, d: A.duplicateFrameForward, '0': () => { A._fitted = false; A.fit(); }, '=': () => zoomAt(1.2), '+': () => zoomAt(1.2), '-': () => zoomAt(1 / 1.2), k: () => C.palette.open() }; if (map[k]) { e.preventDefault(); map[k](); return true; } return false; }
     if (C.isTyping() || !A.doc) return false;
     if (e.key === ' ') { e.preventDefault(); if (A.tool === 'hand' || e.repeat) return true; A.toggle(); return true; }
     if (e.key === 'F5') { e.preventDefault(); e.shiftKey ? A.deleteFrame() : A.insertFrame(); return true; }

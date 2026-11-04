@@ -104,6 +104,8 @@ window.C = window.C || {};
     wave: '<path d="M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/><path d="M2 18c2-4 4-4 6 0s4 4 6 0 4-4 6 0" opacity=".5"/>',
     minus: '<path d="M5 12h14"/>',
     circle: '<circle cx="12" cy="12" r="8"/>',
+    cube: '<path d="m12 2 9 5v10l-9 5-9-5V7z"/><path d="m3 7 9 5 9-5M12 12v10"/>',
+    user: '<circle cx="12" cy="7" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
     bookmark: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M12 7v6M9 10h6"/>',
     clapper: '<path d="M4 11h16v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m4 11-.9-3.5a2 2 0 0 1 1.4-2.4l11.6-3a2 2 0 0 1 2.4 1.4L19 7"/><path d="m7.5 4.6 2.9 3.6M12.4 3.3l2.9 3.6"/>',
     onion: '<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6" opacity=".5"/>',
