@@ -192,22 +192,34 @@
     panel.appendChild(grid);
   }
 
+  let trQuery = '';
   function renderTransitions() {
-    panel.appendChild(C.h('<h3>Transitions</h3>'));
-    panel.appendChild(C.h('<p class="hint" style="margin:-4px 2px 12px">Click to apply to the selected clip(s), or drag onto a clip. Transitions blend from the previous clip on the same track.</p>'));
-    const grid = C.h('<div class="card-grid"></div>');
-    C.TRANSITIONS.forEach((t) => {
-      const card = C.h(`<div class="card" draggable="true"><div class="card-art"><div class="tr-art"><div class="tr-a"></div><div class="tr-b" style="animation-name:${t.anim}"></div></div></div><div class="card-label">${t.name}</div></div>`);
-      card.onclick = () => {
-        const sel = C.selectedClips().filter((c) => c.kind !== 'audio');
-        if (!sel.length) { C.toast('Select a clip first, or drag the transition onto a clip', 'info'); return; }
-        C.act('Add transition', () => C.ops.setTransition(sel, t.id));
-        C.toast(`${t.name} added`, 'ok', 1400);
-      };
-      card.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-cutroom-transition', t.id));
-      grid.appendChild(card);
-    });
-    panel.appendChild(grid);
+    panel.appendChild(C.h(`<h3>Transitions <small class="muted" style="font-weight:500;font-size:12px">${C.TRANSITIONS.length}</small></h3>`));
+    panel.appendChild(C.h('<p class="hint" style="margin:-4px 2px 10px">Hover to preview · click to add to the selected clip(s) · or drag onto a clip. A transition blends in from the previous clip on the same track.</p>'));
+    const q = C.h(`<input class="text-input" placeholder="Search transitions…" value="${C.esc(trQuery)}" style="margin-bottom:6px">`);
+    q.addEventListener('input', C.debounce(() => { trQuery = q.value; L.render(); const n = panel.querySelector('input'); if (n) { n.focus(); n.selectionStart = n.value.length; } }, 200));
+    q.addEventListener('keydown', (e) => e.stopPropagation());
+    panel.appendChild(q);
+    const ql = trQuery.toLowerCase();
+    for (const cat of C.TR_CATS) {
+      const list = C.TRANSITIONS.filter((t) => t.cat === cat && (!ql || t.name.toLowerCase().includes(ql) || cat.toLowerCase().includes(ql)));
+      if (!list.length) continue;
+      panel.appendChild(C.h(`<h4>${cat}</h4>`));
+      const grid = C.h('<div class="card-grid"></div>');
+      list.forEach((t) => {
+        const card = C.fxlib.transitionCard(t);
+        card.onclick = () => {
+          const sel = C.selectedClips().filter((c) => c.kind !== 'audio');
+          if (!sel.length) { C.toast('Select a clip first, or drag the transition onto a clip', 'info'); return; }
+          C.act('Add transition', () => C.ops.setTransition(sel, t.id));
+          card.classList.add('applied'); setTimeout(() => card.classList.remove('applied'), 500);
+          C.toast(`${t.name} added`, 'ok', 1400);
+        };
+        card.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-cutroom-transition', t.id));
+        grid.appendChild(card);
+      });
+      panel.appendChild(grid);
+    }
   }
 
   function renderFilters() {
@@ -242,8 +254,8 @@
     const cd = C.h(`<div class="card fx-pick" draggable="true"><div class="card-art"><img alt=""><span class="fx-badge">${badge || ''}</span></div><div class="card-label">${C.esc(name)}</div></div>`);
     const img = cd.querySelector('img');
     C.presets.queueThumb(img, effects, key);
-    C.presets.hoverAnimate(cd, img, effects);
-    cd.onclick = () => C.presets.applyRef(ref, C.selectedClips().filter((c) => c.kind !== 'audio' && c.kind !== 'effect'));
+    C.fxlib.effectHover(cd, effects);
+    cd.onclick = () => { C.presets.applyRef(ref, C.selectedClips().filter((c) => c.kind !== 'audio' && c.kind !== 'effect')); cd.classList.add('applied'); setTimeout(() => cd.classList.remove('applied'), 500); };
     cd.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-cutroom-effect', ref));
     if (menuItems) cd.addEventListener('contextmenu', (e) => { e.preventDefault(); C.menu(e.clientX, e.clientY, menuItems()); });
     return cd;
@@ -336,7 +348,7 @@
       list.forEach((o) => {
         const effects = C.presets.instantiate(o).effects;
         const cd = C.h(`<div class="card fx-pick" draggable="true"><div class="card-art"><img alt=""><span class="fx-badge">${o.icon}</span></div><div class="card-label">${C.esc(o.name)}</div></div>`);
-        const img = cd.querySelector('img'); C.presets.queueThumb(img, effects, 'ov:' + o.id); C.presets.hoverAnimate(cd, img, effects);
+        const img = cd.querySelector('img'); C.presets.queueThumb(img, effects, 'ov:' + o.id); C.fxlib.effectHover(cd, effects);
         cd.onclick = () => C.presets.applyRef('ov:' + o.id, []);
         cd.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-cutroom-effect', 'ov:' + o.id));
         g.appendChild(cd);

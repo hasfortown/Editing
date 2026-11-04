@@ -549,7 +549,15 @@
   FX.thumb = (effects, key, w = 192, h = 108, t = 0.8) => {
     if (key && thumbCache.has(key)) return thumbCache.get(key);
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-    const cx = cv.getContext('2d'); const src = FX.sampleImage();
+    FX.thumbDraw(cv.getContext('2d'), effects, w, h, t);
+    const url = cv.toDataURL('image/jpeg', 0.8);
+    if (key) thumbCache.set(key, url);
+    return url;
+  };
+  // draw an effect preview straight into a canvas (used for the live hover animation)
+  FX.thumbDraw = (cx, effects, w, h, t) => {
+    const cv = cx.canvas; cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1; cx.globalCompositeOperation = 'source-over'; cx.filter = 'none'; cx.clearRect(0, 0, w, h);
+    const src = FX.sampleImage();
     const sw = src.width || src.naturalWidth, sh = src.height || src.naturalHeight, k = Math.max(w / sw, h / sh);
     cx.drawImage(src, (w - sw * k) / 2, (h - sh * k) / 2, sw * k, sh * k);
     const env = { W: w, H: h, t, T: t, dur: 3, seed: 7 };
@@ -561,9 +569,6 @@
     FX.applyToCanvas(cx, effects, env);
     const sh2 = FX.shape(effects);
     if (sh2) { cx.save(); cx.globalCompositeOperation = 'destination-in'; cx.beginPath(); cx.roundRect(w * 0.12, h * 0.12, w * 0.76, h * 0.76, (Math.min(w, h) * sh2.radius) / 100); cx.fill(); cx.restore(); if (sh2.border) { cx.strokeStyle = sh2.color; cx.lineWidth = (sh2.border * w) / 900; cx.beginPath(); cx.roundRect(w * 0.12, h * 0.12, w * 0.76, h * 0.76, (Math.min(w, h) * sh2.radius) / 100); cx.stroke(); } }
-    const url = cv.toDataURL('image/jpeg', 0.8);
-    if (key) thumbCache.set(key, url);
-    return url;
   };
   FX.clearThumbs = () => thumbCache.clear();
 })(window.C);

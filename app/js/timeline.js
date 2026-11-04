@@ -79,7 +79,10 @@
   };
 
   // ---------- render ----------
+  // clips that appear between renders get a short "drop in" animation
+  let knownClips = new Set(), freshBudget = 0;
   T.render = () => {
+    freshBudget = 4; queueMicrotask(() => { knownClips = new Set(Object.keys(C.project.clips)); });
     if (!tracksEl) return;
     if (C.UI.dragging) { pending = true; return; }
     pending = false;
@@ -122,7 +125,8 @@
     const label = c.kind === 'text' ? (c.text.content.split('\n')[0] || 'Text') : c.name;
     const icon = { video: 'film', image: 'image', audio: 'music', text: c.sticker ? 'smile' : 'text', color: 'square', effect: 'sparkles', shape: 'shapes' }[c.kind];
     const status = r && r.status !== 'ready' ? `<span class="tag">${r.status === 'missing' ? 'MISSING' : r.status === 'error' ? 'ERROR' : '…'}</span>` : '';
-    const el = C.h(`<div class="clip kind-${c.kind} ${sel ? 'selected' : ''} ${c.muted ? 'muted-clip' : ''}" data-clip="${c.id}" style="left:${c.start * pps}px;width:${w}px">
+    const fresh = knownClips.size > 0 && !knownClips.has(c.id) && freshBudget-- > 0;
+    const el = C.h(`<div class="clip kind-${c.kind} ${sel ? 'selected' : ''} ${c.muted ? 'muted-clip' : ''} ${fresh ? 'just-added' : ''}" data-clip="${c.id}" style="left:${c.start * pps}px;width:${w}px">
       ${c.label ? `<div class="label-bar" style="background:${c.label}"></div>` : ''}
       <div class="clip-label">${C.icon(icon)}<span>${C.esc(label)}</span>${status}${c.freeze ? '<span class="tag">FREEZE</span>' : ''}${c.group ? `<span class="tag" title="Grouped">${C.icon('link')}</span>` : ''}${c.effects && c.effects.length && c.kind !== 'effect' ? `<span class="tag" title="${c.effects.length} effect(s)">fx</span>` : ''}${c.blend && c.blend !== 'source-over' ? '<span class="tag">BLEND</span>' : ''}</div>
       ${c.speed !== 1 ? `<span class="speed-tag">${+c.speed.toFixed(2)}×</span>` : ''}

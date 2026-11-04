@@ -302,8 +302,9 @@
     const c = C.evalClip(c0, Math.min(local, c0.duration + 10));
     if (c.kind === 'effect') return drawEffectClip(ctx, c, t, local, W, H, o);
     const an = animState(c, Math.min(local, c.duration));
-    const fxs = c.effects && c.effects.length ? c.effects : null;
-    const env = { W, H, t: local, T: t, dur: c.duration, seed: fxs ? C.fx.seedOf(c.id) : 1 };
+    let fxs = c.effects && c.effects.length ? c.effects : null; let tOff = 0;
+    const tf = C.UI.tryFx; if (tf && !tf.global && tf.clip === c0.id) { fxs = (fxs || []).concat(tf.effects); tOff = tf.clock || 0; }
+    const env = { W, H, t: local + tOff, T: t + tOff, dur: c.duration, seed: fxs ? C.fx.seedOf(c.id) : 1 };
     if (fxs) C.fx.applyPre(an, fxs, env);
     const alpha = c.t.opacity * an.alpha * (o.alpha ?? 1) * fadeAlpha(c, local);
     if (alpha <= 0.002) return;
@@ -330,7 +331,8 @@
     const cx = tt.x * W + (o.dx || 0) + an.dx * W, cy = tt.y * H + (o.dy || 0) + an.dy * H;
     const rot = tt.rotation + an.rot + (o.rot || 0);
     const sc = tt.scale * an.scale * (o.scale ?? 1);
-    const fl = filterStr(c.fx, W, an.blur + (o.blur || 0));
+    let fl = filterStr(c.fx, W, an.blur + (o.blur || 0)); if (o.filter) fl = (fl === 'none' ? '' : fl + ' ') + o.filter;
+    const osx = o.sx ?? 1, osy = o.sy ?? 1;
     g.save();
     if (!layered) {
       if (o.clipFn) { g.beginPath(); o.clipFn(g); g.clip(); }
@@ -339,7 +341,7 @@
     }
     if (!needContent) {
       g.translate(cx, cy); if (rot) g.rotate((rot * Math.PI) / 180);
-      g.scale(sc * (tt.flipH ? -1 : 1), sc * (tt.flipV ? -1 : 1));
+      g.scale(sc * osx * (tt.flipH ? -1 : 1), sc * osy * (tt.flipV ? -1 : 1));
       paintContent(g, c, sz, src, W, H, an, local, fl);
     } else {
       // render the clip's content into its own canvas (masks, rounding, 3D and warps work on it)
@@ -361,15 +363,15 @@
       const fx = tt.flipH ? -1 : 1, fy = tt.flipV ? -1 : 1;
       if (!geom) {
         g.translate(cx, cy); if (rot) g.rotate((rot * Math.PI) / 180);
-        g.scale((fx * sc * sz.w) / cw, (fy * sc * sz.h) / ch);
+        g.scale((fx * sc * osx * sz.w) / cw, (fy * sc * osy * sz.h) / ch);
         g.drawImage(cc, -cw / 2, -ch / 2);
       } else {
         const d = (tt.persp ?? 1) * 1.6 * Math.max(W, H);
         const w2 = sz.w * sc, h2 = sz.h * sc;
         const wf = warp ? C.geo.warpFn(warp, w2, h2, local) : (u, v) => [(u - 0.5) * w2, (v - 0.5) * h2, 0];
         const rx = (tt.rx || 0) + ((g3 && g3.rx) || 0), ry = (tt.ry || 0) + ((g3 && g3.ry) || 0);
-        const tz = (tt.z || 0) * k * 10 + ((g3 && g3.tz) || 0), tx = (g3 && g3.tx) || 0;
-        const map = (u, v) => { let p = wf(u, v); p = [p[0] * fx, p[1] * fy, p[2]]; p = C.geo.rot3(p, rx, ry, rot); p[0] += tx; p[2] += tz; return C.geo.project(p, cx, cy, d); };
+        const tz = (tt.z || 0) * k * 10 + ((g3 && g3.tz) || 0), tx = (g3 && g3.tx) || 0, ty = (g3 && g3.ty) || 0;
+        const map = (u, v) => { let p = wf(u, v); p = [p[0] * fx, p[1] * fy, p[2]]; p = C.geo.rot3(p, rx, ry, rot); p[0] += tx; p[1] += ty; p[2] += tz; return C.geo.project(p, cx, cy, d); };
         const dense = warp && /wrap|sphere|fisheye|twist|arc/.test(warp.mode);
         const cull = warp && (warp.mode === 'wrap' || warp.mode === 'sphere') ? (fx * fy > 0 ? 1 : -1) : 0;
         C.geo.drawMesh(g, cc, cw, ch, dense ? 28 : warp ? 18 : 10, dense ? 18 : warp ? 12 : 10, map, { cull });
@@ -390,50 +392,19 @@
     }
   };
 
+  // offscreen buffers for transitions
+  const trPool = {};
+  C.trOffscreen = (name, w, h) => { let c = trPool[name]; if (!c) c = trPool[name] = document.createElement('canvas'); w = Math.max(1, Math.round(w)); h = Math.max(1, Math.round(h)); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } const x = c.getContext('2d'); x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'source-over'; x.filter = 'none'; x.clearRect(0, 0, w, h); return x; };
   function drawTransition(ctx, st, t, W, H, getSrc) {
     const { a, b, tr } = st;
-    const p = C.ease.inOut(tr.p);
-    const A = (o) => a && C.drawClip(ctx, a, t, W, H, getSrc(a), o);
-    const B = (o) => C.drawClip(ctx, b, t, W, H, getSrc(b), o);
-    switch (tr.type) {
-      case 'dissolve': A(); B({ alpha: p }); break;
-      case 'fadeblack': case 'fadewhite': {
-        const col = tr.type === 'fadeblack' ? '#000' : '#fff';
-        if (p < 0.5) { A(); ctx.save(); ctx.globalAlpha = p * 2; ctx.fillStyle = col; ctx.fillRect(0, 0, W, H); ctx.restore(); }
-        else { B(); ctx.save(); ctx.globalAlpha = (1 - p) * 2; ctx.fillStyle = col; ctx.fillRect(0, 0, W, H); ctx.restore(); }
-        break;
-      }
-      case 'cube': {
-        const a = 90 * p, r = (a * Math.PI) / 180, sW = W / 2;
-        const ga = { ry: a, tx: -sW * Math.sin(r), tz: sW - sW * Math.cos(r) }, gb = { ry: a - 90, tx: sW * Math.cos(r), tz: sW - sW * Math.sin(r) };
-        if (ga.tz > gb.tz) { A({ g3: ga }); B({ g3: gb }); } else { B({ g3: gb }); A({ g3: ga }); }
-        break;
-      }
-      case 'flip3d': { const z = Math.sin(p * Math.PI) * W * 0.35; if (p < 0.5) A({ g3: { ry: p * 180, tz: z } }); else B({ g3: { ry: (p - 1) * 180, tz: z } }); break; }
-      case 'tumble': { const z = Math.sin(p * Math.PI) * H * 0.35; if (p < 0.5) A({ g3: { rx: p * 180, tz: z } }); else B({ g3: { rx: (p - 1) * 180, tz: z } }); break; }
-      case 'door': { A(); const a = -90 * (1 - p), r = (a * Math.PI) / 180, sW = W / 2; B({ g3: { ry: a, tx: -sW + sW * Math.cos(r), tz: -sW * Math.sin(r) } }); break; }
-      case 'swing': { A({ alpha: 1 - p * 0.6 }); B({ g3: { rx: -70 * (1 - p), tz: (1 - p) * H * 0.5 }, alpha: p }); break; }
-      case 'slideLeft': A(); B({ dx: (1 - p) * W }); break;
-      case 'slideRight': A(); B({ dx: -(1 - p) * W }); break;
-      case 'slideUp': A(); B({ dy: (1 - p) * H }); break;
-      case 'slideDown': A(); B({ dy: -(1 - p) * H }); break;
-      case 'push': A({ dx: -p * W }); B({ dx: (1 - p) * W }); break;
-      case 'wipeLeft': A(); B({ clipFn: (cx) => cx.rect(0, 0, p * W, H) }); break;
-      case 'wipeRight': A(); B({ clipFn: (cx) => cx.rect(W - p * W, 0, p * W, H) }); break;
-      case 'circle': A(); B({ clipFn: (cx) => cx.arc(W / 2, H / 2, Math.max(0.1, p * Math.hypot(W, H) / 2), 0, Math.PI * 2) }); break;
-      case 'doors': A(); B({ clipFn: (cx) => cx.rect(W / 2 - (p * W) / 2, 0, p * W, H) }); break;
-      case 'zoom': A({ scale: 1 + p * 0.6, alpha: 1 - p }); B({ scale: 0.6 + 0.4 * p, alpha: p }); break;
-      case 'spin': A(); B({ rot: (1 - p) * -180, scale: Math.max(0.01, p) }); break;
-      case 'blur': A({ blur: p * 60, alpha: 1 - p * 0.5 }); B({ blur: (1 - p) * 60, alpha: p }); break;
-      case 'glitch': {
-        A({ alpha: 1 - p });
-        const j = Math.sin(tr.p * 90) * (1 - p) * W * 0.04;
-        B({ alpha: p, dx: j });
-        if (p < 0.85) { ctx.save(); ctx.globalAlpha = 0.35 * (1 - p); ctx.globalCompositeOperation = 'screen'; B({ dx: -j * 2.5, alpha: 0.5 }); ctx.restore(); }
-        break;
-      }
-      default: A(); B({ alpha: p });
-    }
+    const S = {
+      p: C.ease.inOut(tr.p), raw: tr.p, ctx, W, H, tr,
+      A: (o = {}, g = ctx) => { if (a) C.drawClip(g, a, t, W, H, getSrc(a), o); },
+      B: (o = {}, g = ctx) => C.drawClip(g, b, t, W, H, getSrc(b), o),
+      off: (name, w = W, h = H) => C.trOffscreen(name, w, h),
+    };
+    const fn = C.TR_DRAW && C.TR_DRAW[tr.type];
+    if (fn) fn(S); else { S.A(); S.B({ alpha: S.p }); }
   }
 
   // Composite the whole frame
@@ -448,6 +419,8 @@
       if (st.tr && st.b.kind !== 'effect') drawTransition(ctx, st, t, W, H, getSrc);
       else C.drawClip(ctx, st.b, t, W, H, getSrc(st.b));
     }
+    const tf = C.UI.tryFx;
+    if (tf && tf.global && C.fx) { const tt = t + (tf.clock || 0); const pre = { dx: 0, dy: 0, scale: 1, rot: 0 }; C.fx.applyPre(pre, tf.effects, { W, H, t: tt, T: tt, dur: 5, seed: 3 }); C.fx.applyToCanvas(ctx, tf.effects, { W, H, t: tt, T: tt, dur: 5, seed: 3 }); }
     ctx.restore();
   };
 
