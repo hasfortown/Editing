@@ -800,3 +800,30 @@ body.theme-light .home-card, body.theme-light .home-recent, body.theme-light .ed
 .liq-tools .seg button { flex: none; place-items: center start; padding: 0 10px; height: 30px; }
 .liq-view { position: relative; display: grid; place-items: center; background: repeating-conic-gradient(#2a2c33 0 25%, #1e2026 0 50%) 0 0/16px 16px; border-radius: 10px; overflow: hidden; }
 .liq-view canvas { grid-area: 1/1; cursor: none; }
+
+/* ---------- v1.4 motion tracking ---------- */
+.trk-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 7; }
+.trk-svg .trk-box { pointer-events: none; }
+.trk-svg.active .trk-rect, .trk-svg.active .trk-handle { pointer-events: all; }
+.trk-svg .trk-rect { fill: rgba(255,255,255,.04); stroke-width: 2; cursor: move; }
+.trk-svg .trk-box.on .trk-rect { fill: rgba(255,255,255,.08); stroke-width: 2.5; }
+.trk-svg .trk-search { fill: none; stroke: rgba(255,255,255,.45); stroke-dasharray: 4 4; stroke-width: 1; }
+.trk-svg .trk-cross { stroke-width: 1.5; }
+.trk-svg .trk-handle { stroke: #fff; stroke-width: 1.5; cursor: nwse-resize; }
+.trk-svg .trk-path { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
+.trk-svg .trk-label { fill: #fff; font: 600 11px var(--font); paint-order: stroke; stroke: rgba(0,0,0,.75); stroke-width: 3px; }
+.trk-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; margin-right: 8px; }
+.trk-run { display: grid; grid-template-columns: 1fr 1.2fr auto; gap: 6px; }
+.trk-run .btn { white-space: nowrap; padding: 0 10px; }
+.beat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.beat-row .btn { height: 30px; justify-content: center; white-space: nowrap; font-size: 12px; }
+.beat-row .select { height: 30px; }
+.trk-run .btn { height: 30px; justify-content: center; }
+.trk-opts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; }
+.trk-chk { font-size: 12px; color: var(--text-2); }
+.trk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.trk-actions .btn { height: 32px; justify-content: flex-start; padding: 0 10px; font-size: 12px; gap: 6px; }
+.trk-actions .btn svg { width: 15px; height: 15px; }
+.trk-prev { display: block; width: 100%; max-width: 560px; border-radius: 8px; background: #000; margin: 0 auto; }
+.trk-bar { height: 6px; border-radius: 3px; background: var(--panel-3); margin: 12px 0 8px; overflow: hidden; }
+.trk-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }

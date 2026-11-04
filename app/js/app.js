@@ -30,7 +30,7 @@
     } catch (e) { console.warn('Autosave restore failed', e); C.newProject(); }
     try { const ts = JSON.parse(localStorage.getItem('cutroom.tlh') || 'null'); if (ts) document.documentElement.style.setProperty('--tl-h', ts + 'px'); } catch (_) {}
 
-    C.engine.init(); C.tl.init(); C.preview.init(); C.inspector.init(); C.library.init(); await C.home.init(); C.penMask.init();
+    C.engine.init(); C.tl.init(); C.preview.init(); C.inspector.init(); C.library.init(); await C.home.init(); C.penMask.init(); C.tracker.init();
     C.$$('#modeSwitch button').forEach((b) => (b.onclick = () => C.setMode(b.dataset.m)));
     wireTopbar(); wireTransport(); wireTimelineToolbar(); wireKeys(); wireDrop(); wireResizer(); wireMenus();
     A.afterLoad();

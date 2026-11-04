@@ -109,10 +109,13 @@
     return ts.sort((a, b) => a - b);
   };
   KF.moveTime = (c, from, to) => { for (const p in c.kf || {}) { for (const k of c.kf[p]) if (near(k.t, from)) k.t = to; c.kf[p].sort((a, b) => a.t - b.t); } };
-  KF.shift = (c, dt) => { for (const p in c.kf || {}) for (const k of c.kf[p]) k.t += dt; };
+  // motion-tracking data is keyed by clip-local frame; keep it aligned when a clip is trimmed or split
+  const shiftTracks = (c, df, keep) => { for (const tk of c.tracks || []) { const o = {}; for (const f in tk.pts || {}) { const n = +f + df; if (!keep || keep(+f)) o[n] = tk.pts[f]; } tk.pts = o; if (tk.seed) tk.seed.f = Math.max(0, tk.seed.f + df); } };
+  KF.shift = (c, dt) => { for (const p in c.kf || {}) for (const k of c.kf[p]) k.t += dt; shiftTracks(c, Math.round(dt * C.fps())); };
 
   // Split keyframes between two halves at clip-local time `at`
   KF.split = (a, b, at) => {
+    if ((a.tracks || []).length) { const af = Math.round(at * C.fps()); b.tracks = C.deep(a.tracks); shiftTracks(a, 0, (f) => f <= af); shiftTracks(b, -af, (f) => f >= af); }
     if (!KF.any(a)) { b.kf = {}; return; }
     const src = C.deep(a.kf);
     a.kf = {}; b.kf = {};

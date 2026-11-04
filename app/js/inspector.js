@@ -22,7 +22,7 @@
 
   function computeKey() {
     const s = C.selectedClips();
-    return s.map((c) => c.id + ':' + c.kind + ':' + !!c.transition + ':' + c.freeze + ':' + (c.effects || []).map((e) => e.id + (e.on === false ? '0' : '1') + (e.p.area || '')).join('.')).join(',') + '|' + (s.length ? '' : C.project.settings.aspect);
+    return s.map((c) => c.id + ':' + c.kind + ':' + !!c.transition + ':' + c.freeze + ':' + (c.effects || []).map((e) => e.id + (e.on === false ? '0' : '1') + (e.p.area || '')).join('.') + ':' + (c.tracks || []).map((t) => t.id + t.name + (t.fast ? 1 : 0) + (t.adapt === false ? 0 : 1) + '#' + Object.keys(t.pts || {}).length).join('.')).join(',') + '|' + (s.length ? '' : C.project.settings.aspect);
   }
   function refresh() { for (const r of refreshers) try { r(); } catch (_) {} }
 
@@ -150,7 +150,7 @@
     if (sel.length > 1) return renderMulti(sel);
     const c = sel[0];
     const tabs = {
-      video: [['video', 'Video'], ['color', 'Color'], ['mask', 'Mask'], ['style', 'Style'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['audio', 'Audio'], ['speed', 'Speed'], ['transition', 'Transition']],
+      video: [['video', 'Video'], ['color', 'Color'], ['mask', 'Mask'], ['track', 'Tracking'], ['style', 'Style'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['audio', 'Audio'], ['speed', 'Speed'], ['transition', 'Transition']],
       image: [['video', 'Image'], ['color', 'Color'], ['mask', 'Mask'], ['style', 'Style'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
       text: [['text', 'Text'], ['video', 'Transform'], ['style', 'Style'], ['mask', 'Mask'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
       shape: [['shape', 'Shape'], ['video', 'Transform'], ['style', 'Style'], ['mask', 'Mask'], ['anim', 'Animation'], ['motion', 'Keyframes'], ['transition', 'Transition']],
@@ -176,7 +176,7 @@
     tabs.forEach(([id, l]) => { const b = C.h(`<button class="tab ${id === tab ? 'active' : ''}">${l}</button>`); b.onclick = () => { tab = id; I.render(true); }; tb.appendChild(b); });
     root.appendChild(head);
     const body = C.h('<div class="insp-body"></div>'); root.appendChild(body);
-    ({ video: tabTransform, adjust: tabAdjust, color: tabColor, motion: tabMotion, anim: tabAnim, audio: tabAudio, speed: tabSpeed, transition: tabTransition, text: tabText, effects: tabEffects, mask: tabMask, style: tabStyle, shape: tabShape })[tab](body, c);
+    ({ video: tabTransform, adjust: tabAdjust, color: tabColor, motion: tabMotion, anim: tabAnim, audio: tabAudio, speed: tabSpeed, transition: tabTransition, text: tabText, effects: tabEffects, mask: tabMask, style: tabStyle, shape: tabShape, track: (b, cl) => C.tracker.tab(b, cl, { section, slider, seg, sw }) })[tab](body, c);
     if (sameSel) root.scrollTop = prevScroll;
     C.emit('inspectorRendered');
   };
@@ -473,6 +473,7 @@
       b.onclick = () => C.ops.detachAudio(c);
       d.appendChild(b);
     }
+    C.beats.section(body, c, { section });
     if (c.kind === 'audio') timing(body, c);
   }
 

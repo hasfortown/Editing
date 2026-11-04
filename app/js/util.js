@@ -103,6 +103,10 @@ window.C = window.C || {};
     grid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/>',
     wave: '<path d="M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/><path d="M2 18c2-4 4-4 6 0s4 4 6 0 4-4 6 0" opacity=".5"/>',
     minus: '<path d="M5 12h14"/>',
+    crosshair: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>',
+    track: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M3 3l3 3M21 21l-3-3M3 21l3-3M21 3l-3 3"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>',
+    beat: '<path d="M2 12h3l2-6 3 12 3-9 2 6 2-3h5"/>',
+    wand2: '<path d="m15 4 5 5L9 20H4v-5z"/><path d="m13 6 5 5"/><path d="M3 3h2M4 2v2M20 14h2M21 13v2"/>',
     refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/>',
   };
   C.icon = (name, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
@@ -162,9 +166,11 @@ window.C = window.C || {};
   C.h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 
   C.toast = (msg, kind = 'ok', ms = 3200) => {
+    if (kind === 'error') kind = 'err';
     const el = C.h(`<div class="toast ${kind === 'err' ? 'err' : ''}"><span class="ico">${C.icon(kind === 'err' ? 'alert' : kind === 'info' ? 'info' : 'check')}</span><span>${C.esc(msg)}</span></div>`);
     C.$('#toasts').appendChild(el);
     setTimeout(() => { el.style.transition = 'opacity .25s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 260); }, ms);
+    return el;
   };
 
   // Tooltips
