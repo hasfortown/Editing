@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -47,10 +47,4 @@ jobs:
           make_latest: true
           fail_on_unmatched_files: true
           files: dist/Cutroom-Setup-*.exe
-          body: |
-            ## Download
-            Click **Cutroom-Setup-${{ steps.ver.outputs.version }}.exe** below, then run it.
-
-            Windows SmartScreen may say "Windows protected your PC" because the app isn't code-signed. Click **More info → Run anyway**.
-
-            See the README for features and instructions.
+          body_path: RELEASE_NOTES.md

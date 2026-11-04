@@ -67,6 +67,19 @@ window.C = window.C || {};
     music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
     square: '<rect x="4" y="4" width="16" height="16" rx="2"/>',
     gauge: '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+    smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
+    mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/><path d="M8 22h8"/>',
+    home: '<path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
+    diamond: '<path d="M12 2 22 12 12 22 2 12z"/>',
+    key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
+    command: '<path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/>',
+    wand: '<path d="m15 4-1 1"/><path d="M21 3 3 21"/><path d="m19 9-1 1"/><path d="M8 3v2"/><path d="M19 14v2"/><path d="M5 9H3"/><path d="M21 19h-2"/>',
+    record: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor"/>',
+    stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
+    import: '<path d="M12 15V3"/><path d="m7 10 5 5 5-5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
+    eyedrop: '<path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/>',
     refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/>',
   };
   C.icon = (name, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
@@ -118,6 +131,7 @@ window.C = window.C || {};
   // Event bus
   const listeners = {};
   C.on = (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); };
+  C.off = (ev, fn) => { const l = listeners[ev]; if (l) { const i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); } };
   C.emit = (ev, ...a) => { (listeners[ev] || []).forEach((fn) => { try { fn(...a); } catch (e) { console.error(ev, e); } }); };
 
   C.$ = (s, r = document) => r.querySelector(s);
@@ -160,6 +174,15 @@ window.C = window.C || {};
     m.innerHTML = '';
     items.forEach((it) => {
       if (it === '-') { m.appendChild(C.h('<div class="ctx-sep"></div>')); return; }
+      if (it.swatches) {
+        const row = C.h('<div class="ctx-swatches"></div>');
+        it.swatches.forEach((col) => {
+          const b = C.h(`<button class="sw ${col === (it.current || null) ? 'on' : ''}" title="${col ? 'Label color' : 'No label'}" style="background:${col || 'transparent'}">${col ? '' : '∅'}</button>`);
+          b.addEventListener('click', () => { C.closeMenu(); it.action(col); });
+          row.appendChild(b);
+        });
+        m.appendChild(row); return;
+      }
       const el = C.h(`<div class="ctx-item ${it.disabled ? 'disabled' : ''}"><span class="ico">${it.icon ? C.icon(it.icon) : ''}</span><span>${C.esc(it.label)}</span>${it.key ? `<span class="k">${C.esc(it.key)}</span>` : ''}</div>`);
       el.addEventListener('click', () => { C.closeMenu(); it.action && it.action(); });
       m.appendChild(el);
@@ -173,11 +196,19 @@ window.C = window.C || {};
   document.addEventListener('mousedown', (e) => { if (!e.target.closest('#ctxMenu') && !e.target.closest('.menu-btn')) C.closeMenu(); });
 
   // Modal
-  C.modal = (html, { onClose, dismissable = true } = {}) => {
+  C.modal = (html, { onClose, dismissable = true, cls = '' } = {}) => {
     const bd = C.$('#modalBackdrop'), m = C.$('#modal');
+    if (C._modalClose) { const prev = C._modalClose; C._modalClose = null; try { prev(); } catch (_) {} }
+    const token = {}; C._modalToken = token;
+    C._modalDismissable = true;
+    m.className = 'modal' + (cls ? ' ' + cls : '');
     m.innerHTML = html; C.fillIcons(m);
     bd.classList.add('show');
-    const close = () => { bd.classList.remove('show'); m.innerHTML = ''; bd.onclick = null; onClose && onClose(); C._modalClose = null; };
+    const close = () => {
+      if (token.closed) return; token.closed = true;
+      if (C._modalToken === token) { bd.classList.remove('show'); m.innerHTML = ''; m.className = 'modal'; bd.onclick = null; C._modalClose = null; C._modalToken = null; }
+      onClose && onClose();
+    };
     bd.onclick = (e) => { if (e.target === bd && dismissable && C._modalDismissable !== false) close(); };
     C._modalClose = close;
     m.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', close));

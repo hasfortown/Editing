@@ -1,3 +1,4 @@
 node_modules/
 dist/
 vendor/ffmpeg/win32/ffmpeg.exe
+node_modules

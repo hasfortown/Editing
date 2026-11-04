@@ -19,6 +19,7 @@
       E.ac = new AudioContext({ latencyHint: 'interactive' });
       E.master = E.ac.createGain();
       E.master.connect(E.ac.destination);
+      E.analyser = E.ac.createAnalyser(); E.analyser.fftSize = 512; E.master.connect(E.analyser);
       for (const p of E.players.values()) connectAudio(p);
     } catch (e) { console.warn('Audio unavailable', e); }
   };
@@ -97,7 +98,9 @@
     E.ensureAudio();
     const d = C.duration();
     if (d <= 0) return;
-    if (C.UI.playhead >= d - 0.01) C.UI.playhead = 0;
+    const r = C.project.range;
+    if (C.UI.loop && r && (C.UI.playhead < r.in || C.UI.playhead >= r.out - 0.01)) C.UI.playhead = r.in;
+    else if (C.UI.playhead >= d - 0.01) C.UI.playhead = r ? r.in : 0;
     C.UI.playing = true;
     startWall = performance.now(); startT = C.UI.playhead;
     C.emit('playstate');
@@ -124,9 +127,11 @@
   function tick() {
     if (!C.UI.playing) return;
     let t = startT + (performance.now() - startWall) / 1000;
-    const d = C.duration();
+    const rg = C.project.range;
+    const d = C.UI.loop && rg ? rg.out : C.duration();
     if (t >= d) {
-      if (C.UI.loop && d > 0) { startWall = performance.now(); startT = 0; t = 0; E.sync(0, true, true); }
+      const back = C.UI.loop && rg ? rg.in : 0;
+      if (C.UI.loop && d > 0) { startWall = performance.now(); startT = back; t = back; E.sync(back, true, true); }
       else { C.UI.playhead = d; E.pause(); return; }
     }
     C.UI.playhead = t;
@@ -246,8 +251,8 @@
       }
     }
     return {
-      async frame(i, ctx) {
-        const t = i / fps;
+      async frame(i, ctx, t0 = 0) {
+        const t = t0 + i / fps;
         const need = C.neededAt(t).filter((x) => x.clip.kind === 'video');
         await Promise.all(need.map((x) => pull(x.clip, x.src)));
         const ids = new Set(need.map((x) => x.clip.id));
@@ -261,5 +266,7 @@
       close() { window.native.decClose(null); st.clear(); },
     };
   };
+  const meterBuf = new Float32Array(512);
+  E.level = () => { if (!E.analyser || !C.UI.playing) return 0; E.analyser.getFloatTimeDomainData(meterBuf); let p = 0; for (const v of meterBuf) p = Math.max(p, Math.abs(v)); return p; };
   E.stopAll = () => { for (const p of E.players.values()) { try { p.el.pause(); } catch (_) {} if (p.gain) p.gain.gain.value = 0; } };
 })(window.C);

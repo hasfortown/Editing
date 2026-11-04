@@ -2,7 +2,10 @@
 (function (C) {
   const X = (C.exporter = {});
   let tab = 'video';
-  const opts = { format: 'mp4', res: 1080, fps: 0, quality: 'high', aformat: 'wav', amode: 'mix' };
+  const opts = { format: 'mp4', res: 1080, fps: 0, quality: 'high', aformat: 'wav', amode: 'mix', rangeOnly: true };
+  const span = () => { const r = C.project.range; return r && opts.rangeOnly ? { off: r.in, dur: r.out - r.in, ranged: true } : { off: 0, dur: C.duration(), ranged: false }; };
+  const rangeRow = () => C.project.range ? `<div class="form-row"><label>Length</label><div class="seg" id="exRg"><button data-v="1">In/out range (${C.fmtDur(C.project.range.out - C.project.range.in)})</button><button data-v="0">Whole timeline</button></div></div>` : '';
+  const wireRange = (form, upd) => { const g = form.querySelector('#exRg'); if (!g) return; const sync = () => g.querySelectorAll('button').forEach((b) => b.classList.toggle('on', (b.dataset.v === '1') === opts.rangeOnly)); g.querySelectorAll('button').forEach((b) => (b.onclick = () => { opts.rangeOnly = b.dataset.v === '1'; sync(); upd && upd(); })); sync(); };
   const FORMATS = {
     mp4: { ext: 'mp4', label: 'MP4 (H.264)', note: 'Best for sharing — plays everywhere' },
     prores: { ext: 'mov', label: 'MOV (ProRes 422)', note: 'Editing-grade master, very large files' },
@@ -53,6 +56,7 @@
           <div class="form-row"><label>Resolution</label><select class="select" id="exRes">${[480, 720, 1080, 1440, 2160].map((r) => `<option value="${r}">${r === 2160 ? '4K' : r === 1440 ? '2K' : r + 'p'}</option>`).join('')}</select></div>
           <div class="form-row"><label>Frame rate</label><select class="select" id="exFps">${fpsOpts.map((f) => `<option value="${f}">${f ? f + ' fps' : `Project (${C.fps()} fps)`}</option>`).join('')}</select></div>
           <div class="form-row"><label>Quality</label><div class="seg" id="exQ"><button data-v="low">Smaller</button><button data-v="medium">Balanced</button><button data-v="high">Best</button></div></div>
+          ${rangeRow()}
           <p class="est" id="exEst"></p>`;
         foot.innerHTML = `<button class="btn" data-close>Cancel</button><button class="btn primary" id="exGo">${C.icon('export')}<span>Export video</span></button>`;
         const fmt = form.querySelector('#exFmt'), res = form.querySelector('#exRes'), fps = form.querySelector('#exFps');
@@ -62,11 +66,13 @@
           form.querySelectorAll('#exQ button').forEach((b) => b.classList.toggle('on', b.dataset.v === opts.quality));
           const { W, H } = dims();
           const rate = { mp4: { high: 0.12, medium: 0.07, low: 0.035 }, prores: { high: 1.2, medium: 0.8, low: 0.8 }, webm: { high: 0.08, medium: 0.05, low: 0.025 }, gif: { high: 0.3, medium: 0.3, low: 0.3 } }[opts.format][opts.quality];
-          const bytes = (W * H * (opts.fps || C.fps()) * rate * dur) / 8 + dur * 32000;
+          const sd = span().dur;
+          const bytes = (W * H * (opts.fps || C.fps()) * rate * sd) / 8 + sd * 32000;
           form.querySelector('#exEst').innerHTML = `${W} × ${H} · ${FORMATS[opts.format].note}<br>Estimated size ≈ ${C.fmtBytes(bytes)}`;
         };
         [fmt, res, fps].forEach((x) => x.addEventListener('change', upd));
         form.querySelectorAll('#exQ button').forEach((b) => (b.onclick = () => { opts.quality = b.dataset.v; upd(); }));
+        wireRange(form, upd);
         upd();
         foot.querySelector('#exGo').onclick = () => X.runVideo(form.querySelector('#exName').value || safeName(), el, close);
       } else if (tab === 'audio') {
@@ -75,6 +81,7 @@
           <div class="form-row"><label>File name</label><input class="text-input" id="exName" value="${C.esc(safeName())}"></div>
           <div class="form-row"><label>Format</label><select class="select" id="exAF">${Object.entries(AFORMATS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
           <div class="form-row"><label>Export</label><div class="seg" id="exAM"><button data-v="mix">Full mix</button><button data-v="stems">Each track (stems)</button></div></div>
+          ${rangeRow()}
           <p class="est" id="exAEst"></p>`;
         foot.innerHTML = `<button class="btn" data-close>Cancel</button><button class="btn primary" id="exGo">${C.icon('audio')}<span>Export audio</span></button>`;
         const af = form.querySelector('#exAF'); af.value = opts.aformat;
@@ -86,13 +93,14 @@
             : `One file per track (${audTracks.length} track${audTracks.length === 1 ? '' : 's'} with audio): ${audTracks.map((t) => C.esc(t.name)).join(', ') || '—'}. Every file runs the full timeline length, so they line up in any DAW.`;
         };
         af.addEventListener('change', upd);
+        wireRange(form, null);
         form.querySelectorAll('#exAM button').forEach((b) => (b.onclick = () => { opts.amode = b.dataset.v; upd(); }));
         upd();
         foot.querySelector('#exGo').onclick = () => X.runAudio(form.querySelector('#exName').value || safeName(), el, close);
       } else {
         form.innerHTML = `<h3 style="margin:0 0 8px;font-size:14px">Share this project</h3>
           <p class="hint">Bundles the project <b style="color:var(--text)">and every media file it uses</b> into a single <span class="kbd">.cutroompack</span> file. Send it by USB drive, cloud storage or email — whoever opens it in Cutroom gets the full editable timeline.</p>
-          <p class="hint">Want to edit together at the same time? Use <b style="color:var(--text)">Collaborate</b> to edit live over Wi-Fi.</p>`;
+          <p class="hint">Want to edit together at the same time? Use <b style="color:var(--text)">Collaborate</b> and share your join code.</p>`;
         foot.innerHTML = `<button class="btn" id="exCollab">${C.icon('users')}<span>Collaborate live</span></button><button class="btn primary" id="exGo">${C.icon('share')}<span>Create share package</span></button>`;
         foot.querySelector('#exGo').onclick = () => { close(); C.share.pack(); };
         foot.querySelector('#exCollab').onclick = () => { close(); C.collabUI.open(); };
@@ -133,7 +141,7 @@
     if (!out) return;
     const { W, H } = dims();
     const fps = opts.fps || C.fps();
-    const dur = C.duration();
+    const sp = span(); const dur = sp.dur;
     const N = Math.max(1, Math.round(dur * fps));
     const ui = progressView(el, `Exporting ${C.baseName(out)}`);
     let cancelled = false;
@@ -143,7 +151,7 @@
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const ctx = cv.getContext('2d', { alpha: false, willReadFrequently: true });
     const pv = el.querySelector('#exPrev'); const pctx = pv.getContext('2d');
-    const st = await window.native.exportStart({ outPath: out, width: W, height: H, fps, format: opts.format, quality: opts.quality, audio: C.audioPlan(), duration: N / fps });
+    const st = await window.native.exportStart({ outPath: out, width: W, height: H, fps, format: opts.format, quality: opts.quality, audio: C.audioPlan(), duration: N / fps, offset: sp.off });
     if (!st.ok) { C.UI.exporting = false; failView(el, close, st.error); return; }
     const t0 = performance.now();
     const sess = C.engine.exportSession(W, H, fps);
@@ -151,7 +159,7 @@
     try {
       for (let i = 0; i < N; i++) {
         if (cancelled) break;
-        await sess.frame(i, ctx);
+        await sess.frame(i, ctx, sp.off);
         const img = ctx.getImageData(0, 0, W, H);
         const w = await window.native.exportFrame(img.data.buffer);
         if (!w) { ok = false; break; }
@@ -178,7 +186,7 @@
   };
 
   X.runAudio = async (name, el, close, outPath) => {
-    const dur = C.duration();
+    const sp = span(); const dur = sp.dur;
     const ext = opts.aformat;
     const jobs = [];
     if (opts.amode === 'mix') {
@@ -203,7 +211,7 @@
     window.native.onAudioProgress((v) => { const p = (cur + v) / jobs.length; ui.bar.style.width = p * 100 + '%'; ui.pct.textContent = Math.round(p * 100) + '%'; });
     for (const j of jobs) {
       ui.eta.textContent = j.label;
-      const r = await window.native.exportAudio({ outPath: j.out, format: ext, audio: j.plan, duration: dur });
+      const r = await window.native.exportAudio({ outPath: j.out, format: ext, audio: j.plan, duration: dur, offset: sp.off });
       if (!r.ok) { failView(el, close, r.error); return; }
       cur++;
     }

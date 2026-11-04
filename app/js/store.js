@@ -20,7 +20,7 @@
     const p = {
       id: C.uid('p_'), name, version: 2,
       settings: { aspect: '16:9', width: 1920, height: 1080, fps: 30, bg: '#000000' },
-      tracks: {}, trackOrder: [], clips: {}, media: {}, markers: {},
+      tracks: {}, trackOrder: [], clips: {}, media: {}, markers: {}, range: null,
     };
     C.project = p;
     C.addTrack('video', null, true);
@@ -102,9 +102,11 @@
       id: C.uid('c_'), trackId: null, kind: 'video', mediaId: null, name: 'Clip', start: 0, duration: 5, in: 0, speed: 1,
       volume: 1, muted: false, fadeIn: 0, fadeOut: 0, transition: null, t: C.defaultTransform(), fx: C.defaultFx(),
       anim: { in: 'none', out: 'none', dur: 0.5 }, audioDetached: false,
+      effects: [], kf: {}, blend: 'source-over', group: null, label: null,
     }, o);
     if (c.kind === 'text' && !c.text) c.text = C.defaultText();
     if (c.kind === 'color' && !c.color) c.color = '#2b2d42';
+    if (c.kind === 'effect' && !c.name) c.name = 'Effect';
     return c;
   };
 
@@ -114,12 +116,21 @@
   };
 
   // ---------- selection ----------
-  C.select = (ids, mode = 'set') => {
+  C.select = (ids, mode = 'set', expand = true) => {
     if (mode === 'set') C.selection.clear();
+    if (expand && ids.length) ids = C.expandGroups(ids);
+    if (ids.length) C.UI.anchor = ids[ids.length - 1];
     for (const id of ids) {
       if (mode === 'toggle' && C.selection.has(id)) C.selection.delete(id); else C.selection.add(id);
     }
     C.emit('select');
+  };
+  // groups: selecting one clip of a group selects all of it
+  C.expandGroups = (ids) => {
+    const out = new Set(ids);
+    const groups = new Set([...out].map((id) => C.project.clips[id] && C.project.clips[id].group).filter(Boolean));
+    if (groups.size) for (const c of Object.values(C.project.clips)) if (c.group && groups.has(c.group)) out.add(c.id);
+    return [...out];
   };
   C.selectedClips = () => [...C.selection].map(C.getClip).filter(Boolean);
   C.primary = () => { const s = C.selectedClips(); return s.length ? s[s.length - 1] : null; };
@@ -137,6 +148,7 @@
     }
     if (!same(a.trackOrder, b.trackOrder)) { d.trackOrder = b.trackOrder.slice(); any = true; }
     if (!same(a.settings, b.settings)) { d.settings = C.deep(b.settings); any = true; }
+    if (!same(a.range || null, b.range || null)) { d.range = b.range ? C.deep(b.range) : null; any = true; }
     if (a.name !== b.name) { d.name = b.name; any = true; }
     return any ? d : null;
   };
@@ -155,6 +167,7 @@
     // orphan clips -> drop
     for (const id in p.clips) if (!p.tracks[p.clips[id].trackId]) delete p.clips[id];
     if (d.settings) p.settings = C.deep(d.settings);
+    if (d.range !== undefined) p.range = d.range ? C.deep(d.range) : null;
     if (d.name !== undefined) p.name = d.name;
   };
   // inverse of a diff relative to the state it was produced from
@@ -163,6 +176,7 @@
     for (const k of ENTITY) if (d[k]) { inv[k] = {}; for (const id in d[k]) inv[k][id] = before[k][id] ? C.deep(before[k][id]) : null; }
     if (d.trackOrder) inv.trackOrder = before.trackOrder.slice();
     if (d.settings) inv.settings = C.deep(before.settings);
+    if (d.range !== undefined) inv.range = before.range ? C.deep(before.range) : null;
     if (d.name !== undefined) inv.name = before.name;
     return inv;
   };
@@ -227,6 +241,7 @@
       c.t = Object.assign(C.defaultTransform(), c.t); c.fx = Object.assign(C.defaultFx(), c.fx);
       c.anim = Object.assign({ in: 'none', out: 'none', dur: 0.5 }, c.anim);
       if (c.kind === 'text') c.text = Object.assign(C.defaultText(), c.text);
+      c.effects = c.effects || []; c.kf = c.kf || {}; c.blend = c.blend || 'source-over';
     }
     C.project = p;
     C.history = { undo: [], redo: [] }; C._txn = null;

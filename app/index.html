@@ -19,8 +19,9 @@
     <div class="title-wrap"><input id="projectName" class="project-name" spellcheck="false" value="Untitled project"><span id="saveState" class="save-state">Saved</span></div>
     <div class="top-right">
       <div id="collabAvatars" style="display:flex;align-items:center;padding-left:6px"></div>
-      <button class="btn" id="btnCollab" data-tip="Edit together over Wi-Fi"><span class="ico" data-icon="users"></span>Collaborate</button>
+      <button class="btn" id="btnCollab" data-tip="Edit together with friends using a join code"><span class="ico" data-icon="users"></span>Collaborate</button>
       <div class="sep"></div>
+      <button class="icon-btn" id="btnPalette" data-tip="Command palette (Ctrl+K)"></button>
       <button class="icon-btn" id="btnUndo" data-tip="Undo (Ctrl+Z)"></button>
       <button class="icon-btn" id="btnRedo" data-tip="Redo (Ctrl+Shift+Z)"></button>
       <div class="sep"></div>
@@ -41,6 +42,8 @@
       <nav class="rail">
         <button class="rail-btn active" data-panel="media"><span class="ico" data-icon="media"></span><span>Media</span></button>
         <button class="rail-btn" data-panel="text"><span class="ico" data-icon="text"></span><span>Text</span></button>
+        <button class="rail-btn" data-panel="stickers"><span class="ico" data-icon="smile"></span><span>Stickers</span></button>
+        <button class="rail-btn" data-panel="effects"><span class="ico" data-icon="wand"></span><span>Effects</span></button>
         <button class="rail-btn" data-panel="transitions"><span class="ico" data-icon="transition"></span><span>Transitions</span></button>
         <button class="rail-btn" data-panel="filters"><span class="ico" data-icon="filter"></span><span>Filters</span></button>
         <button class="rail-btn" data-panel="elements"><span class="ico" data-icon="shapes"></span><span>Elements</span></button>
@@ -76,6 +79,7 @@
           <button class="icon-btn" id="btnEnd" data-tip="Go to end (End)"></button>
         </div>
         <div class="transport-right">
+          <div class="meter" id="audioMeter" data-tip="Audio level"><div></div></div>
           <button class="icon-btn" id="btnLoop" data-tip="Loop playback"></button>
           <button class="icon-btn" id="btnSnapshot" data-tip="Save frame as PNG"></button>
           <button class="icon-btn" id="btnFullscreen" data-tip="Fullscreen preview"></button>
@@ -101,6 +105,8 @@
         <button class="icon-btn" id="tlFreeze" data-tip="Freeze frame (3s)"></button>
         <div class="sep"></div>
         <button class="icon-btn" id="tlAddMarker" data-tip="Add marker (M)"></button>
+        <button class="icon-btn" id="tlEffect" data-tip="Add effect to selection, or an effect clip"></button>
+        <button class="icon-btn rec" id="tlRecord" data-tip="Record voiceover (R)"></button>
       </div>
       <div class="tl-tools">
         <button class="icon-btn toggle on" id="tlSnap" data-tip="Snapping (N)"></button>
@@ -133,8 +139,10 @@
 
 <script src="js/util.js"></script>
 <script src="js/store.js"></script>
+<script src="js/keyframes.js"></script>
 <script src="js/media.js"></script>
 <script src="js/render.js"></script>
+<script src="js/effects.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/timeline.js"></script>
 <script src="js/preview.js"></script>
@@ -142,6 +150,11 @@
 <script src="js/library.js"></script>
 <script src="js/export.js"></script>
 <script src="js/collab.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/emoji.js"></script>
+<script src="js/record.js"></script>
+<script src="js/home.js"></script>
+<script src="js/palette.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

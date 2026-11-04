@@ -1,7 +1,7 @@
 {
   "name": "cutroom",
   "productName": "Cutroom",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Cutroom - a fast, clean multi-track video editor",
   "main": "electron/main.js",
   "author": "Cutroom",

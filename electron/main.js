@@ -172,7 +172,7 @@ function atempoChain(speed) {
 
 // Build audio inputs + filter graph from a mixing plan.
 // plan.segments: [{path, start, in, dur, speed, volume, fadeIn, fadeOut}]
-function buildAudioGraph(plan, inputOffset, total) {
+function buildAudioGraph(plan, inputOffset, total, offset = 0) {
   const args = [];
   const filters = [];
   const labels = [];
@@ -184,7 +184,8 @@ function buildAudioGraph(plan, inputOffset, total) {
     chain.push('aformat=sample_rates=48000:channel_layouts=stereo');
     chain.push(...atempoChain(s.speed));
     chain.push(`atrim=0:${s.dur.toFixed(4)}`, 'asetpts=PTS-STARTPTS');
-    chain.push(`volume=${Math.max(0, s.volume).toFixed(4)}`);
+    if (s.volExpr && /^[\w().,+\-*/ ]+$/.test(s.volExpr)) chain.push(`volume='${s.volExpr}':eval=frame`);
+    else chain.push(`volume=${Math.max(0, s.volume).toFixed(4)}`);
     if (s.fadeIn > 0.001) chain.push(`afade=t=in:st=0:d=${Math.min(s.fadeIn, s.dur).toFixed(4)}`);
     if (s.fadeOut > 0.001) {
       const fo = Math.min(s.fadeOut, s.dur);
@@ -196,7 +197,7 @@ function buildAudioGraph(plan, inputOffset, total) {
     labels.push(`[a${i}]`);
   });
   if (labels.length === 0) return null;
-  const tail = `apad,atrim=0:${total.toFixed(4)},asetpts=PTS-STARTPTS[aout]`;
+  const tail = `apad,atrim=${offset.toFixed(4)}:${(offset + total).toFixed(4)},asetpts=PTS-STARTPTS[aout]`;
   if (labels.length === 1) filters.push(`${labels[0]}${tail}`);
   else filters.push(`${labels.join('')}amix=inputs=${labels.length}:normalize=0:dropout_transition=0,${tail}`);
   return { args, graph: filters.join(';\n') };
@@ -321,10 +322,10 @@ let job = null;
 
 ipcMain.handle('export:start', async (_e, opts) => {
   if (job) return { ok: false, error: 'An export is already running.' };
-  const { outPath, width, height, fps, format, quality, audio, duration } = opts;
+  const { outPath, width, height, fps, format, quality, audio, duration, offset = 0 } = opts;
   const args = ['-hide_banner', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${width}x${height}`, '-r', String(fps), '-i', 'pipe:0'];
   let graphFile = null;
-  const ag = format === 'gif' ? null : buildAudioGraph(audio, 1, duration);
+  const ag = format === 'gif' ? null : buildAudioGraph(audio, 1, duration, offset);
   if (ag) {
     args.push(...ag.args);
     const fa = await filterArgs(ag.graph); graphFile = fa.file;
@@ -394,9 +395,9 @@ ipcMain.handle('export:cancel', async () => {
 });
 
 ipcMain.handle('export:audio', async (e, opts) => {
-  const { outPath, format, audio, duration } = opts;
+  const { outPath, format, audio, duration, offset = 0 } = opts;
   const args = ['-hide_banner', '-y'];
-  const ag = buildAudioGraph(audio, 0, duration);
+  const ag = buildAudioGraph(audio, 0, duration, offset);
   let graphFile = null;
   if (ag) {
     args.push(...ag.args);
@@ -509,3 +510,47 @@ ipcMain.handle('dec:close', async (_e, key) => {
   for (const k of keys) { const d = decoders.get(k); if (d) { try { d.proc.kill('SIGKILL'); } catch (_) {} decoders.delete(k); } }
   return true;
 });
+
+// ---------- Effect presets ----------
+const presetsFile = () => path.join(userDir(), 'presets.json');
+ipcMain.handle('presets:load', async () => { try { return await fsp.readFile(presetsFile(), 'utf8'); } catch (_) { return null; } });
+ipcMain.handle('presets:save', async (_e, text) => { await fsp.mkdir(userDir(), { recursive: true }); await fsp.writeFile(presetsFile(), text, 'utf8'); return true; });
+ipcMain.handle('presets:exportDialog', async (_e, name) => {
+  const r = await dialog.showSaveDialog(win, { title: 'Export effect presets', defaultPath: path.join(app.getPath('documents'), (name || 'My presets') + '.cutfx'), filters: [{ name: 'Cutroom effect presets', extensions: ['cutfx'] }] });
+  return r.canceled ? null : r.filePath;
+});
+ipcMain.handle('presets:importDialog', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Import effect presets', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Cutroom effect presets', extensions: ['cutfx', 'json'] }] });
+  if (r.canceled) return [];
+  const out = [];
+  for (const f of r.filePaths) { try { out.push({ path: f, text: await fsp.readFile(f, 'utf8') }); } catch (_) {} }
+  return out;
+});
+
+// ---------- Voice-over recordings ----------
+ipcMain.handle('rec:save', async (_e, { buffer, projectPath, name }) => {
+  const dir = projectPath ? path.join(path.dirname(projectPath), 'Cutroom Recordings') : path.join(app.getPath('documents'), 'Cutroom Recordings');
+  await fsp.mkdir(dir, { recursive: true });
+  const base = (name || 'Voiceover').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+\d+$/, '');
+  let out;
+  for (let i = 1; ; i++) { out = path.join(dir, `${base} ${i}.m4a`); if (!fs.existsSync(out)) break; }
+  const tmp = path.join(os.tmpdir(), `cutroom-rec-${Date.now()}.webm`);
+  await fsp.writeFile(tmp, Buffer.from(buffer));
+  const r = await runFFmpeg(['-hide_banner', '-y', '-i', tmp, '-vn', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', out]);
+  fsp.unlink(tmp).catch(() => {});
+  if (r.code !== 0) return { ok: false, error: r.err.slice(-600) };
+  return { ok: true, path: out };
+});
+
+// microphone access for voice-overs
+app.whenReady().then(() => {
+  const { session } = require('electron');
+  const allow = new Set(['media', 'microphone', 'audioCapture', 'clipboard-sanitized-write']);
+  session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(allow.has(perm)));
+  session.defaultSession.setPermissionCheckHandler((_wc, perm) => allow.has(perm));
+});
+
+// ---------- Recent projects ----------
+const recentsFile = () => path.join(userDir(), 'recents.json');
+ipcMain.handle('recents:load', async () => { try { return JSON.parse(await fsp.readFile(recentsFile(), 'utf8')); } catch (_) { return []; } });
+ipcMain.handle('recents:save', async (_e, list) => { await fsp.mkdir(userDir(), { recursive: true }); await fsp.writeFile(recentsFile(), JSON.stringify(list.slice(0, 24)), 'utf8'); return true; });

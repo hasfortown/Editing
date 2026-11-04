@@ -9,6 +9,28 @@ A fast, clean multi-track video editor for Windows. It has a modern dark interfa
 3. Follow the setup wizard. It installs only for your user, so no admin rights are needed, and it adds Start Menu and desktop shortcuts.
 4. To uninstall, go to **Settings → Apps → Cutroom → Uninstall**.
 
+## What's new in 1.1
+
+- **Effects:** about 30 base effects across blur & distort, motion, color, retro, light, stylize, overlays, and green screen.
+  - Add them to any clip, or drop an **effect clip** on a track to affect everything below it.
+  - Most effects can be limited to a **box or ellipse you drag on the player**. Spotlight, kaleidoscope, vignette, and zoom blur have a draggable center.
+- **Keyframes:** every slider has a ◆ button, including transform, color, volume, text size, and every effect setting.
+  - Choose easing per keyframe (linear, ease in/out, hold) and drag the diamonds on the timeline to retime them.
+- **Effect Studio:** stack and tune effects with a live animated preview, then save them as presets.
+  - Presets export and import as `.cutfx` files, so you can share looks with friends.
+- **Stickers & emoji:** a searchable emoji library, emoji in any text, and an emoji particle rain effect.
+- **Home screen:** an animated start screen with one-click new projects for each format, continue-editing, recent projects, and join-with-code.
+- **Voice-overs:** record from any microphone with a level meter and countdown, while the timeline plays.
+- **Collaborate with a code:** start a session and share the join code. Everyone enters their name first, so you can see who's who.
+- **Layers & selection:**
+  - 17 blend modes and grouping (Ctrl+G).
+  - Shift-click range select and Alt-drag to duplicate.
+  - Select everything after the playhead, label colors, and rename (F2).
+  - Drag track headers to reorder tracks, with per-track heights.
+- **Quality of life:**
+  - Command palette (Ctrl+K) and in/out range export and looping (I/O).
+  - Audio level meter, hover-scrub in the media library, and a keyboard shortcut sheet (?).
+
 ## Features
 
 **Editing**
@@ -39,10 +61,12 @@ A fast, clean multi-track video editor for Windows. It has a modern dark interfa
 - **Share Project** bundles the project and every media file into one `.cutroompack` file. Send it any way you like, and the recipient opens it with a double-click.
 - Almost any video format can be imported. Formats Windows can't play natively, such as some AVI, WMV, or MTS files, are converted automatically for editing.
 
-**Live collaboration over Wi-Fi**
-- Click **Collaborate → Start session**. Anyone on the same network opens Collaborate and sees your session listed, then joins with the 6-digit PIN.
-- Edits sync live. Media you import is transferred to the others automatically, and you can see each person's playhead and selected clips.
-- The first time, Windows Firewall asks for permission. Choose **Private networks**.
+**Collaborate**
+- Click **Collaborate**, enter your name, and start a session. You get a join code like `K7F2-9QXA-M3TD`.
+- Friends enter the code in **Collaborate** or on the home screen, along with their own name.
+- Edits sync live and media transfers automatically. Everyone's playhead and selected clips show with their name and color.
+- Your friends' computers must be able to reach yours, for example on the same home, school, or office network.
+- The first time, Windows Firewall asks for permission. Choose **Allow**.
 
 ## Keyboard shortcuts
 
@@ -56,6 +80,12 @@ A fast, clean multi-track video editor for Windows. It has a modern dark interfa
 | Previous / next edit point | ↑ / ↓ |
 | Zoom timeline | Ctrl+wheel, + / − , Shift+Z to fit |
 | Import / Save / Open / Export | Ctrl+I / Ctrl+S / Ctrl+O / Ctrl+E |
+| Command palette | Ctrl+K |
+| In / out point, clear | I / O, Alt+X |
+| Group / ungroup | Ctrl+G / Ctrl+Shift+G |
+| Range select / duplicate-drag | Shift+click / Alt+drag |
+| Record voiceover / add text | R / T |
+| All shortcuts | ? |
 
 ## Build from source
 
@@ -79,6 +109,7 @@ Run that on Windows. On Linux or macOS, use `npx electron-builder --win dir` fol
 ### Project layout
 
 - `electron/main.js`: app window, media streaming, FFmpeg export, transcoding, and waveforms.
-- `electron/collab.js`: LAN discovery over UDP, plus the WebSocket sync hub and media transfer over HTTP.
+- `electron/collab.js`: session discovery over UDP, plus the WebSocket sync hub and media transfer over HTTP.
 - `electron/share.js`: `.cutroompack` packing and unpacking.
 - `app/js/`: the editor UI. That covers the store, undo and diffs, compositor, playback engine, timeline, inspector, library, export, and collaboration client.
+- `app/js/effects.js`, `keyframes.js`, `presets.js`: the effects engine, the keyframe system, and the Effect Studio with presets.

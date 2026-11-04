@@ -75,7 +75,7 @@
     const tr = C.project.tracks[c.trackId];
     if (!tr || tr.muted || c.muted || !C.hasAudio(c)) return 0;
     const local = t - c.start;
-    let g = c.volume;
+    let g = C.kf.value(c, 'volume', Math.min(Math.max(0, local), c.duration));
     if (local < 0) return 0;
     if (local < c.duration) {
       if (c.fadeIn > 0 && local < c.fadeIn) g *= local / c.fadeIn;
@@ -96,14 +96,14 @@
       if (tr.muted) continue;
       if (trackFilter && !trackFilter(tr)) continue;
       for (const c of C.clipsOn(tr.id)) {
-        if (c.muted || !C.hasAudio(c) || c.volume <= 0) continue;
+        if (c.muted || !C.hasAudio(c) || (c.volume <= 0 && !C.kf.has(c, 'volume'))) continue;
         const m = C.mediaOf(c); if (!m) continue;
         let dur = c.duration, fadeIn = c.fadeIn, fadeOut = c.fadeOut;
         const d = C.trDur(c);
         if (d && C.prevAdjacent(c)) fadeIn = Math.max(fadeIn, d);
         const n = C.nextAdjacent(c); const nd = n ? C.trDur(n) : 0;
         if (nd) { const room = m.duration ? (m.duration - c.in) / c.speed - c.duration : nd; const ext = Math.max(0, Math.min(nd, room)); dur += ext; fadeOut = Math.max(fadeOut, ext); }
-        segs.push({ path: C.mediaPath(m), start: c.start, in: c.in, dur, speed: c.speed, volume: c.volume, fadeIn, fadeOut });
+        segs.push({ path: C.mediaPath(m), start: c.start, in: c.in, dur, speed: c.speed, volume: c.volume, fadeIn, fadeOut, volExpr: C.kf.volumeExpr(c) });
       }
     }
     return { segments: segs };
@@ -212,45 +212,108 @@
     });
   }
 
-  // Draw one clip. o: {alpha, dx, dy, scale, rot, blur, clipFn}
-  C.drawClip = (ctx, c, t, W, H, src, o = {}) => {
-    const local = t - c.start;
-    const an = animState(c, Math.min(local, c.duration));
-    let alpha = c.t.opacity * an.alpha * (o.alpha ?? 1);
+  C.BLENDS = [['source-over', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Color dodge'], ['color-burn', 'Color burn'], ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'], ['hue', 'Hue'], ['saturation', 'Saturation'], ['color', 'Color'], ['luminosity', 'Luminosity'], ['lighter', 'Add']];
+
+  function fadeAlpha(c, local) {
+    let a = 1;
     if (local < c.duration) {
-      if (c.fadeIn > 0 && local < c.fadeIn) alpha *= local / c.fadeIn;
-      if (c.fadeOut > 0 && local > c.duration - c.fadeOut) alpha *= Math.max(0, (c.duration - local) / c.fadeOut);
+      if (c.fadeIn > 0 && local < c.fadeIn) a *= local / c.fadeIn;
+      if (c.fadeOut > 0 && local > c.duration - c.fadeOut) a *= Math.max(0, (c.duration - local) / c.fadeOut);
     }
+    return a;
+  }
+
+  // Effect clip ("adjustment layer"): applies its effects to everything below it
+  function drawEffectClip(ctx, c, t, local, W, H, o) {
+    const alpha = c.t.opacity * fadeAlpha(c, local) * (o.alpha ?? 1);
+    if (alpha <= 0.002 || !c.effects || !c.effects.length) return;
+    const env = { W, H, t: local, T: t, dur: c.duration, seed: C.fx.seedOf(c.id) };
+    const s = { dx: 0, dy: 0, scale: 1, rot: 0, alpha: 1, blur: 0, chars: 1 };
+    C.fx.applyPre(s, c.effects, env);
+    if (s.dx || s.dy || s.scale !== 1 || s.rot) {
+      const T = C.fx.canvas('adjpre', W, H); const tc = T._cx; tc.setTransform(1, 0, 0, 1, 0, 0); tc.globalAlpha = 1; tc.globalCompositeOperation = 'source-over'; tc.filter = 'none';
+      tc.clearRect(0, 0, W, H); tc.drawImage(ctx.canvas, 0, 0);
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = C.project.settings.bg || '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.translate(W / 2 + s.dx * W * alpha, H / 2 + s.dy * H * alpha); ctx.rotate(((s.rot * alpha) * Math.PI) / 180); const k = 1 + (s.scale - 1) * alpha; ctx.scale(k, k);
+      ctx.drawImage(T, -W / 2, -H / 2); ctx.restore();
+    }
+    if (C.fx.hasLayer(c.effects)) C.fx.applyToCanvas(ctx, c.effects, env, alpha);
+  }
+
+  // Draw one clip. o: {alpha, dx, dy, scale, rot, blur, clipFn}
+  C.drawClip = (ctx, c0, t, W, H, src, o = {}) => {
+    const local = t - c0.start;
+    const c = C.evalClip(c0, Math.min(local, c0.duration + 10));
+    if (c.kind === 'effect') return drawEffectClip(ctx, c, t, local, W, H, o);
+    const an = animState(c, Math.min(local, c.duration));
+    const fxs = c.effects && c.effects.length ? c.effects : null;
+    const env = { W, H, t: local, T: t, dur: c.duration, seed: fxs ? C.fx.seedOf(c.id) : 1 };
+    if (fxs) C.fx.applyPre(an, fxs, env);
+    let alpha = c.t.opacity * an.alpha * (o.alpha ?? 1) * fadeAlpha(c, local);
     if (alpha <= 0.002) return;
     if ((c.kind === 'video' || c.kind === 'image') && !src) return;
-    const sz = C.contentSize(c, W, H, ctx);
-    ctx.save();
-    if (o.clipFn) { ctx.beginPath(); o.clipFn(ctx); ctx.clip(); }
-    ctx.globalAlpha = C.clamp(alpha, 0, 1);
-    ctx.translate(c.t.x * W + (o.dx || 0) + an.dx * W, c.t.y * H + (o.dy || 0) + an.dy * H);
+    const shape = fxs ? C.fx.shape(fxs) : null;
+    const comp = fxs ? C.fx.compositeFilter(fxs, W) : 'none';
+    const layered = !!fxs && (C.fx.hasLayer(fxs) || !!shape || comp !== 'none');
+    const blend = c.blend || 'source-over';
+    let L = null, g = ctx;
+    if (layered) {
+      const cv = C.fx.canvas('layer', W, H); L = { cv, cx: cv._cx, W, H }; g = L.cx;
+      g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none'; g.clearRect(0, 0, W, H);
+    }
+    const sz = C.contentSize(c, W, H, g);
+    g.save();
+    if (!layered) {
+      if (o.clipFn) { g.beginPath(); o.clipFn(g); g.clip(); }
+      g.globalAlpha = C.clamp(alpha, 0, 1);
+      if (blend !== 'source-over') g.globalCompositeOperation = blend;
+    }
+    g.translate(c.t.x * W + (o.dx || 0) + an.dx * W, c.t.y * H + (o.dy || 0) + an.dy * H);
     const rot = (c.t.rotation + an.rot + (o.rot || 0)) * Math.PI / 180;
-    if (rot) ctx.rotate(rot);
+    if (rot) g.rotate(rot);
     const sc = c.t.scale * an.scale * (o.scale ?? 1);
-    ctx.scale(sc * (c.t.flipH ? -1 : 1), sc * (c.t.flipV ? -1 : 1));
-    ctx.filter = filterStr(c.fx, W, an.blur + (o.blur || 0));
-    if (c.kind === 'text') drawText(ctx, c, W, H, an.chars);
-    else if (c.kind === 'color') { ctx.fillStyle = c.color; ctx.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h); }
-    else ctx.drawImage(src, -sz.w / 2, -sz.h / 2, sz.w, sz.h);
-    ctx.filter = 'none';
+    g.scale(sc * (c.t.flipH ? -1 : 1), sc * (c.t.flipV ? -1 : 1));
+    const rr = shape ? (Math.min(sz.w, sz.h) * shape.radius) / 100 : 0;
+    if (shape) { g.save(); g.beginPath(); g.roundRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h, rr); g.clip(); }
+    g.filter = filterStr(c.fx, W, an.blur + (o.blur || 0));
+    if (c.kind === 'text') drawText(g, c, W, H, an.chars);
+    else if (c.kind === 'color') { g.fillStyle = c.color; g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h); }
+    else g.drawImage(src, -sz.w / 2, -sz.h / 2, sz.w, sz.h);
+    g.filter = 'none';
+    const baseA = layered ? 1 : C.clamp(alpha, 0, 1);
     if (c.fx.temperature && c.kind !== 'text') {
-      ctx.globalCompositeOperation = 'soft-light';
-      ctx.globalAlpha = Math.min(1, Math.abs(c.fx.temperature) / 100) * C.clamp(alpha, 0, 1);
-      ctx.fillStyle = c.fx.temperature > 0 ? '#ff9a2e' : '#2e8bff';
-      ctx.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h);
-      ctx.globalCompositeOperation = 'source-over';
+      g.globalCompositeOperation = 'soft-light';
+      g.globalAlpha = Math.min(1, Math.abs(c.fx.temperature) / 100) * baseA;
+      g.fillStyle = c.fx.temperature > 0 ? '#ff9a2e' : '#2e8bff';
+      g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h);
+      g.globalCompositeOperation = layered ? 'source-over' : blend;
     }
     if (c.fx.vignette && c.kind !== 'text') {
-      ctx.globalAlpha = C.clamp(alpha, 0, 1);
-      const g = ctx.createRadialGradient(0, 0, Math.min(sz.w, sz.h) * 0.25, 0, 0, Math.hypot(sz.w, sz.h) / 2);
-      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${c.fx.vignette / 100})`);
-      ctx.fillStyle = g; ctx.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h);
+      g.globalAlpha = baseA;
+      const gr = g.createRadialGradient(0, 0, Math.min(sz.w, sz.h) * 0.25, 0, 0, Math.hypot(sz.w, sz.h) / 2);
+      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, `rgba(0,0,0,${c.fx.vignette / 100})`);
+      g.fillStyle = gr; g.fillRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h);
     }
-    ctx.restore();
+    if (shape) {
+      g.restore();
+      if (shape.border > 0) {
+        g.globalAlpha = baseA; g.globalCompositeOperation = 'source-over';
+        g.lineWidth = (shape.border * (W / 1920)) / Math.max(0.01, Math.abs(sc)); g.strokeStyle = shape.color;
+        g.beginPath(); g.roundRect(-sz.w / 2, -sz.h / 2, sz.w, sz.h, rr); g.stroke();
+      }
+    }
+    g.restore();
+    if (layered) {
+      C.fx.applyLayer(L, fxs, env);
+      ctx.save();
+      if (o.clipFn) { ctx.beginPath(); o.clipFn(ctx); ctx.clip(); }
+      ctx.globalAlpha = C.clamp(alpha, 0, 1);
+      ctx.globalCompositeOperation = blend;
+      ctx.filter = comp;
+      ctx.drawImage(L.cv, 0, 0);
+      ctx.restore();
+    }
   };
 
   function drawTransition(ctx, st, t, W, H, getSrc) {
@@ -298,7 +361,7 @@
     for (const tr of ts) {
       const st = C.trackStateAt(tr, t);
       if (!st) continue;
-      if (st.tr) drawTransition(ctx, st, t, W, H, getSrc);
+      if (st.tr && st.b.kind !== 'effect') drawTransition(ctx, st, t, W, H, getSrc);
       else C.drawClip(ctx, st.b, t, W, H, getSrc(st.b));
     }
     ctx.restore();

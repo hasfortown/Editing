@@ -53,12 +53,14 @@
     C.on('media', () => { if (current === 'media') L.render(); });
     C.on('change', (i) => { if (current === 'media' && (i.source === 'remote' || i.source === 'undo')) L.render(); });
     C.on('mediaProgress', (id) => { if (current === 'media') updateItem(id); });
+    C.on('presets', () => { if (current === 'effects') L.render(); });
     L.render();
   };
 
+  L.show = (name) => { const b = C.$(`.rail-btn[data-panel="${name}"]`); if (b) b.click(); };
   L.render = () => {
     panel.innerHTML = '';
-    ({ media: renderMedia, text: renderText, transitions: renderTransitions, filters: renderFilters, elements: renderElements })[current]();
+    ({ media: renderMedia, text: renderText, transitions: renderTransitions, filters: renderFilters, elements: renderElements, effects: renderEffects, stickers: renderStickers })[current]();
     C.fillIcons(panel);
   };
 
@@ -94,6 +96,18 @@
     const th = el.querySelector('.media-thumb');
     paintThumb(th, m, r);
     el.querySelector('.media-add').addEventListener('click', (e) => { e.stopPropagation(); addAtPlayhead(m); });
+    if (m.kind === 'video') {
+      th.addEventListener('mousemove', (e) => {
+        const rr = C.MR[m.id]; if (!rr || !rr.thumbs || rr.thumbs.length < 2) return;
+        const b = th.getBoundingClientRect(); const f = C.clamp((e.clientX - b.left) / b.width, 0, 0.999);
+        const cv = th.querySelector('canvas'); if (!cv) return;
+        const img = rr.thumbs[Math.floor(f * rr.thumbs.length)].img; const x = cv.getContext('2d');
+        const iw = img.width, ih = img.height, k = Math.max(cv.width / iw, cv.height / ih);
+        x.drawImage(img, (cv.width - iw * k) / 2, (cv.height - ih * k) / 2, iw * k, ih * k);
+        x.fillStyle = '#19d3c5'; x.fillRect(f * cv.width - 1.5, 0, 3, cv.height);
+      });
+      th.addEventListener('mouseleave', () => paintThumb(th, m, C.MR[m.id] || {}));
+    }
     el.addEventListener('dblclick', () => addAtPlayhead(m));
     el.addEventListener('dragstart', (e) => {
       if ((C.MR[m.id] || {}).status !== 'ready') { e.preventDefault(); C.toast('Still preparing this file…', 'info'); return; }
@@ -212,6 +226,95 @@
       grid.appendChild(card);
     });
     panel.appendChild(grid);
+  }
+
+  function fxCard(ref, name, effects, key, badge, menuItems) {
+    const cd = C.h(`<div class="card fx-pick" draggable="true"><div class="card-art"><img alt=""><span class="fx-badge">${badge || ''}</span></div><div class="card-label">${C.esc(name)}</div></div>`);
+    const img = cd.querySelector('img');
+    C.presets.queueThumb(img, effects, key);
+    C.presets.hoverAnimate(cd, img, effects);
+    cd.onclick = () => C.presets.applyRef(ref, C.selectedClips().filter((c) => c.kind !== 'audio' && c.kind !== 'effect'));
+    cd.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-cutroom-effect', ref));
+    if (menuItems) cd.addEventListener('contextmenu', (e) => { e.preventDefault(); C.menu(e.clientX, e.clientY, menuItems()); });
+    return cd;
+  }
+  let fxQuery = '';
+  function renderEffects() {
+    const P = C.presets;
+    panel.appendChild(C.h('<h3>Effects</h3>'));
+    const act = C.h(`<div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;margin-bottom:10px"><button class="btn primary">${C.icon('wand')}<span>Effect Studio</span></button><button class="icon-btn" data-tip="Import presets (.cutfx)">${C.icon('import')}</button><button class="icon-btn" data-tip="Export my presets">${C.icon('export')}</button></div>`);
+    const [bStudio, bImp, bExp] = act.querySelectorAll('button');
+    bStudio.onclick = () => P.studio(); bImp.onclick = () => P.importPresets(); bExp.onclick = () => P.exportPresets(P.user, 'My Cutroom presets');
+    panel.appendChild(act);
+    panel.appendChild(C.h('<p class="hint" style="margin:0 2px 10px">Click to add to the selected clip — or, with nothing selected, as an <b style="color:var(--text)">effect clip</b> that affects everything below it. Drag onto a clip or track. Hover to preview.</p>'));
+    const q = C.h(`<input class="text-input" placeholder="Search effects & presets…" value="${C.esc(fxQuery)}" style="margin-bottom:6px">`);
+    q.addEventListener('input', C.debounce(() => { fxQuery = q.value; L.render(); const n = panel.querySelector('input'); if (n) { n.focus(); n.selectionStart = n.value.length; } }, 200));
+    q.addEventListener('keydown', (e) => e.stopPropagation());
+    panel.appendChild(q);
+    const ql = fxQuery.toLowerCase();
+    const mine = P.user.filter((p) => !ql || p.name.toLowerCase().includes(ql));
+    panel.appendChild(C.h(`<h4>My presets</h4>`));
+    if (mine.length) {
+      const g = C.h('<div class="card-grid"></div>');
+      mine.forEach((p) => g.appendChild(fxCard('preset:' + p.id, p.name, P.instantiate(p).effects, 'p:' + p.id + ':' + (p.created || 0), p.imported ? '⇣' : '', () => [
+        { label: 'Apply', icon: 'sparkles', action: () => P.applyRef('preset:' + p.id, C.selectedClips().filter((c) => c.kind !== 'audio')) },
+        { label: 'Edit in Effect Studio', icon: 'wand', action: () => P.studio({ preset: p }) },
+        { label: 'Rename…', icon: 'text', action: () => P.rename(p) },
+        { label: 'Export…', icon: 'export', action: () => P.exportPresets([p], p.name) },
+        '-', { label: 'Delete', icon: 'trash', action: () => P.remove(p) },
+      ])));
+      panel.appendChild(g);
+    } else panel.appendChild(C.h(`<div class="hint" style="margin:0 2px 6px">${ql ? 'No matches.' : 'Build your own look in the <b>Effect Studio</b>, or right-click a clip → “Save effects as preset”. Import presets friends share with you using the ⇣ button.'}</div>`));
+    const packs = C.fx.BUILTIN_PRESETS.filter((p) => !ql || p.name.toLowerCase().includes(ql));
+    if (packs.length) {
+      panel.appendChild(C.h('<h4>Preset looks</h4>'));
+      const g = C.h('<div class="card-grid"></div>');
+      packs.forEach((p) => g.appendChild(fxCard('preset:' + p.id, p.name, P.instantiate(p).effects, 'p:' + p.id, '★', () => [
+        { label: 'Apply', icon: 'sparkles', action: () => P.applyRef('preset:' + p.id, C.selectedClips().filter((c) => c.kind !== 'audio')) },
+        { label: 'Customize in Effect Studio', icon: 'wand', action: () => P.studio({ preset: p }) },
+        { label: 'Export…', icon: 'export', action: () => P.exportPresets([p], p.name) },
+      ])));
+      panel.appendChild(g);
+    }
+    for (const cat of C.fx.CATS) {
+      const defs = C.fx.DEFS.filter((d) => d.cat === cat && (!ql || d.name.toLowerCase().includes(ql) || cat.toLowerCase().includes(ql)));
+      if (!defs.length) continue;
+      panel.appendChild(C.h(`<h4>${cat}</h4>`));
+      const g = C.h('<div class="card-grid"></div>');
+      defs.forEach((d) => g.appendChild(fxCard('fx:' + d.id, d.name, [C.fx.newEffect(d.id)], 'fx:' + d.id, d.icon)));
+      panel.appendChild(g);
+    }
+  }
+
+  let stickerCat = 'Smileys', stickerQ = '';
+  function renderStickers() {
+    panel.appendChild(C.h('<h3>Stickers & emoji</h3>'));
+    const q = C.h(`<input class="text-input" placeholder="Search emoji (e.g. fire, party, heart)…" value="${C.esc(stickerQ)}">`);
+    q.addEventListener('input', () => { stickerQ = q.value; fill(); });
+    q.addEventListener('keydown', (e) => e.stopPropagation());
+    panel.appendChild(q);
+    const tabs = C.h('<div class="emoji-tabs big"></div>');
+    const recent = C.emoji.recent();
+    [...(recent.length ? [['Recent', '🕘']] : []), ...C.emoji.CATS.map((c) => [c.name, C.emoji.CAT_ICON[c.name]])].forEach(([n, ic]) => {
+      const b = C.h(`<button data-c="${n}" title="${n}">${ic}</button>`); b.onclick = () => { stickerCat = n; stickerQ = ''; q.value = ''; fill(); }; tabs.appendChild(b);
+    });
+    panel.appendChild(tabs);
+    const title = C.h('<h4></h4>'); panel.appendChild(title);
+    const grid = C.h('<div class="sticker-grid"></div>'); panel.appendChild(grid);
+    panel.appendChild(C.h('<p class="hint" style="margin-top:12px">Click to add at the playhead, or drag onto the timeline. Stickers are fully editable — resize, rotate, animate and keyframe them like text. You can also type emoji straight into any text.</p>'));
+    function fill() {
+      tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', !stickerQ && b.dataset.c === stickerCat));
+      const items = stickerQ ? C.emoji.search(stickerQ) : stickerCat === 'Recent' ? C.emoji.recent().map((e) => ({ e })) : C.emoji.CATS.find((c) => c.name === stickerCat).items;
+      title.textContent = stickerQ ? `Results (${items.length})` : stickerCat;
+      grid.innerHTML = '';
+      for (const it of items) {
+        const b = C.h(`<button draggable="true" title="${C.esc(it.k || '')}">${it.e}</button>`);
+        b.onclick = () => { C.emoji.pushRecent(it.e); C.act('Add sticker', () => { const c = C.ops.addSticker(it.e); C.select([c.id]); }); };
+        b.addEventListener('dragstart', (e) => { C.emoji.pushRecent(it.e); e.dataTransfer.setData('application/x-cutroom-sticker', it.e); });
+        grid.appendChild(b);
+      }
+    }
+    fill();
   }
 
   function renderElements() {
