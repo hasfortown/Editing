@@ -74,7 +74,7 @@ To build the Windows installer, put `ffmpeg.exe` from a Windows build (for examp
 npm run dist:win
 ```
 
-Run that on Windows. On Linux or macOS, use `npx electron-builder --win dir` followed by `makensis build/installer.nsi`.
+Run that on Windows. On Linux or macOS, use `npx electron-builder --win dir` followed by `makensis build/cutroom-standalone.nsi`.
 
 ### Project layout
 
