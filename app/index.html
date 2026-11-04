@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' app: data: blob:; img-src 'self' app: data: blob:; media-src 'self' app: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data: app:">
+<title>Cutroom</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><img src="icons/logo.svg" alt="" class="logo"><span>Cutroom</span></div>
+    <div class="menus">
+      <button class="menu-btn" data-menu="file">File</button>
+      <button class="menu-btn" data-menu="edit">Edit</button>
+      <button class="menu-btn" data-menu="clip">Clip</button>
+      <button class="menu-btn" data-menu="help">Help</button>
+    </div>
+    <div class="title-wrap"><input id="projectName" class="project-name" spellcheck="false" value="Untitled project"><span id="saveState" class="save-state">Saved</span></div>
+    <div class="top-right">
+      <div id="collabAvatars" style="display:flex;align-items:center;padding-left:6px"></div>
+      <button class="btn" id="btnCollab" data-tip="Edit together over Wi-Fi"><span class="ico" data-icon="users"></span>Collaborate</button>
+      <div class="sep"></div>
+      <button class="icon-btn" id="btnUndo" data-tip="Undo (Ctrl+Z)"></button>
+      <button class="icon-btn" id="btnRedo" data-tip="Redo (Ctrl+Shift+Z)"></button>
+      <div class="sep"></div>
+      <select id="aspectSelect" class="select compact" data-tip="Canvas aspect ratio">
+        <option value="16:9">16:9 Landscape</option>
+        <option value="9:16">9:16 Vertical</option>
+        <option value="1:1">1:1 Square</option>
+        <option value="4:5">4:5 Portrait</option>
+        <option value="4:3">4:3 Classic</option>
+        <option value="21:9">21:9 Cinema</option>
+      </select>
+      <button class="btn primary" id="btnExport"><span class="ico" data-icon="export"></span>Export</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="library">
+      <nav class="rail">
+        <button class="rail-btn active" data-panel="media"><span class="ico" data-icon="media"></span><span>Media</span></button>
+        <button class="rail-btn" data-panel="text"><span class="ico" data-icon="text"></span><span>Text</span></button>
+        <button class="rail-btn" data-panel="transitions"><span class="ico" data-icon="transition"></span><span>Transitions</span></button>
+        <button class="rail-btn" data-panel="filters"><span class="ico" data-icon="filter"></span><span>Filters</span></button>
+        <button class="rail-btn" data-panel="elements"><span class="ico" data-icon="shapes"></span><span>Elements</span></button>
+      </nav>
+      <div class="panel" id="libraryPanel"></div>
+    </aside>
+
+    <section class="viewer">
+      <div class="viewer-head">
+        <span class="viewer-title">Player</span>
+        <div class="viewer-tools">
+          <select id="previewQuality" class="select compact ghost" data-tip="Preview quality">
+            <option value="1">Full</option>
+            <option value="0.5" selected>1/2</option>
+            <option value="0.33">1/3</option>
+          </select>
+        </div>
+      </div>
+      <div class="stage" id="stage">
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="previewCanvas"></canvas>
+          <div class="overlay" id="overlay"></div>
+        </div>
+        <div class="drop-hint" id="dropHint"><div><span class="ico big" data-icon="upload"></span><p>Drop files to import</p></div></div>
+      </div>
+      <div class="transport">
+        <div class="tc"><span id="tcCurrent">00:00:00.00</span><span class="tc-sep">/</span><span id="tcTotal" class="muted">00:00:00.00</span></div>
+        <div class="transport-btns">
+          <button class="icon-btn" id="btnStart" data-tip="Go to start (Home)"></button>
+          <button class="icon-btn" id="btnPrevFrame" data-tip="Previous frame (←)"></button>
+          <button class="play-btn" id="btnPlay" data-tip="Play / Pause (Space)"></button>
+          <button class="icon-btn" id="btnNextFrame" data-tip="Next frame (→)"></button>
+          <button class="icon-btn" id="btnEnd" data-tip="Go to end (End)"></button>
+        </div>
+        <div class="transport-right">
+          <button class="icon-btn" id="btnLoop" data-tip="Loop playback"></button>
+          <button class="icon-btn" id="btnSnapshot" data-tip="Save frame as PNG"></button>
+          <button class="icon-btn" id="btnFullscreen" data-tip="Fullscreen preview"></button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="inspector" id="inspector"></aside>
+  </main>
+
+  <div class="resizer" id="tlResizer"></div>
+
+  <section class="timeline" id="timeline">
+    <div class="tl-toolbar">
+      <div class="tl-tools">
+        <button class="icon-btn" id="tlSelect" data-tip="Selection tool (V)"></button>
+        <button class="icon-btn" id="tlBlade" data-tip="Blade tool (B) — click a clip to cut"></button>
+        <div class="sep"></div>
+        <button class="icon-btn" id="tlSplit" data-tip="Split at playhead (S)"></button>
+        <button class="icon-btn" id="tlDelete" data-tip="Delete (Del) · Ripple delete (Shift+Del)"></button>
+        <button class="icon-btn" id="tlDuplicate" data-tip="Duplicate (Ctrl+D)"></button>
+        <button class="icon-btn" id="tlDetach" data-tip="Detach audio"></button>
+        <button class="icon-btn" id="tlFreeze" data-tip="Freeze frame (3s)"></button>
+        <div class="sep"></div>
+        <button class="icon-btn" id="tlAddMarker" data-tip="Add marker (M)"></button>
+      </div>
+      <div class="tl-tools">
+        <button class="icon-btn toggle on" id="tlSnap" data-tip="Snapping (N)"></button>
+        <button class="icon-btn toggle" id="tlRipple" data-tip="Ripple editing"></button>
+        <div class="sep"></div>
+        <button class="icon-btn" id="tlZoomOut" data-tip="Zoom out (-)"></button>
+        <input type="range" id="tlZoom" min="0" max="1000" value="400" class="zoom-range">
+        <button class="icon-btn" id="tlZoomIn" data-tip="Zoom in (+)"></button>
+        <button class="icon-btn" id="tlFit" data-tip="Zoom to fit (Shift+Z)"></button>
+      </div>
+    </div>
+    <div class="tl-body" id="tlBody">
+      <div class="tl-scroll" id="tlScroll">
+        <div class="tl-inner" id="tlInner">
+          <div class="tl-ruler-row"><div class="tl-corner" id="tlCorner"></div><canvas class="tl-ruler" id="tlRuler"></canvas></div>
+          <div class="tl-tracks" id="tlTracks"></div>
+          <div class="tl-playhead" id="tlPlayhead"><div class="ph-head"></div></div>
+          <div class="tl-snapline" id="tlSnapline"></div>
+          <div class="tl-marquee" id="tlMarquee"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop"><div class="modal" id="modal"></div></div>
+<div class="ctx-menu" id="ctxMenu"></div>
+<div class="toasts" id="toasts"></div>
+<div class="tooltip" id="tooltip"></div>
+
+<script src="js/util.js"></script>
+<script src="js/store.js"></script>
+<script src="js/media.js"></script>
+<script src="js/render.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/timeline.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/inspector.js"></script>
+<script src="js/library.js"></script>
+<script src="js/export.js"></script>
+<script src="js/collab.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

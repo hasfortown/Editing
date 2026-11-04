@@ -1,0 +1,109 @@
+{
+  "name": "cutroom",
+  "productName": "Cutroom",
+  "version": "1.0.0",
+  "description": "Cutroom - a fast, clean multi-track video editor",
+  "main": "electron/main.js",
+  "author": "Cutroom",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "^45.2.2",
+    "electron-builder": "^26.18.0",
+    "resedit": "^3.1.0"
+  },
+  "dependencies": {
+    "ws": "^8.22.1",
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1"
+  },
+  "build": {
+    "appId": "app.cutroom.editor",
+    "productName": "Cutroom",
+    "copyright": "Cutroom",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "app/**/*",
+      "electron/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asar": true,
+    "npmRebuild": false,
+    "afterPack": "build/afterPack.js",
+    "fileAssociations": [
+      {
+        "ext": "cutroom",
+        "name": "Cutroom Project",
+        "description": "Cutroom video project",
+        "icon": "build/icon.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "cutroompack",
+        "name": "Cutroom Share Package",
+        "description": "Cutroom project with media",
+        "icon": "build/icon.ico",
+        "role": "Editor"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "extraResources": [
+        {
+          "from": "vendor/ffmpeg/win32/ffmpeg.exe",
+          "to": "ffmpeg/ffmpeg.exe"
+        },
+        {
+          "from": "vendor/ffmpeg/win32/LICENSE.txt",
+          "to": "ffmpeg/LICENSE.txt"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Cutroom",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "artifactName": "Cutroom-Setup-${version}.exe",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.video",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo",
+      "icon": "build/icon.png"
+    }
+  }
+}
