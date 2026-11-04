@@ -51,6 +51,7 @@
     panel = C.$('#libraryPanel');
     C.$$('.rail-btn').forEach((b) => b.addEventListener('click', () => { current = b.dataset.panel; C.$$('.rail-btn').forEach((x) => x.classList.toggle('active', x === b)); L.render(); }));
     C.on('media', () => { if (current === 'media') L.render(); });
+    C.on('assets', () => { if (current === 'assets') L.render(); });
     C.on('change', (i) => { if (current === 'media' && (i.source === 'remote' || i.source === 'undo')) L.render(); });
     C.on('mediaProgress', (id) => { if (current === 'media') updateItem(id); });
     C.on('presets', () => { if (current === 'effects') L.render(); });
@@ -60,7 +61,7 @@
   L.show = (name) => { const b = C.$(`.rail-btn[data-panel="${name}"]`); if (b) b.click(); };
   L.render = () => {
     panel.innerHTML = '';
-    ({ media: renderMedia, text: renderText, transitions: renderTransitions, filters: renderFilters, elements: renderElements, effects: renderEffects, stickers: renderStickers, overlays: renderOverlays })[current]();
+    ({ media: renderMedia, text: renderText, transitions: renderTransitions, filters: renderFilters, elements: renderElements, effects: renderEffects, stickers: renderStickers, overlays: renderOverlays, assets: () => C.assets.render(panel) })[current]();
     C.fillIcons(panel);
   };
 

@@ -583,6 +583,48 @@ ipcMain.handle('photo:autoPath', async (_e, name) => {
   return out;
 });
 
+// ---------- Generic file dialogs (animation app, assets) ----------
+ipcMain.handle('file:saveDialog', async (_e, o = {}) => {
+  const base = o.dir === 'videos' ? app.getPath('videos') : app.getPath('documents');
+  const r = await dialog.showSaveDialog(win, { title: o.title || 'Save', defaultPath: path.join(base, (o.name || 'Untitled') + '.' + (o.ext || 'dat')), filters: [{ name: o.extName || o.ext || 'File', extensions: [o.ext || '*'] }] });
+  return r.canceled ? null : r.filePath;
+});
+ipcMain.handle('file:openDialog', async (_e, o = {}) => {
+  const r = await dialog.showOpenDialog(win, { title: o.title || 'Open', properties: o.multi ? ['openFile', 'multiSelections'] : ['openFile'], filters: o.exts ? [{ name: o.extName || 'Files', extensions: o.exts }] : [] });
+  return r.canceled ? null : (o.multi ? r.filePaths : r.filePaths[0]);
+});
+ipcMain.handle('anim:autoPath', async (_e, name, ext = 'mp4') => {
+  const dir = path.join(app.getPath('videos') || app.getPath('documents'), 'Cutroom Animations');
+  await fsp.mkdir(dir, { recursive: true });
+  const base = String(name || 'Animation').replace(/[\\/:*?"<>|]+/g, '_');
+  let out = path.join(dir, base + '.' + ext);
+  for (let i = 2; fs.existsSync(out); i++) out = path.join(dir, `${base} ${i}.${ext}`);
+  return out;
+});
+
+// ---------- Asset library (saved across projects, in the user's app data) ----------
+const assetsDir = () => path.join(userDir(), 'assets');
+const assetFiles = () => path.join(assetsDir(), 'files');
+ipcMain.handle('assets:load', async () => { try { return JSON.parse(await fsp.readFile(path.join(assetsDir(), 'library.json'), 'utf8')); } catch (_) { return []; } });
+ipcMain.handle('assets:save', async (_e, list) => { await fsp.mkdir(assetsDir(), { recursive: true }); await fsp.writeFile(path.join(assetsDir(), 'library.json'), JSON.stringify(list), 'utf8'); return true; });
+ipcMain.handle('assets:copyIn', async (_e, src) => {
+  await fsp.mkdir(assetFiles(), { recursive: true });
+  const ext = path.extname(src); const base = path.basename(src, ext).replace(/[^\w\- ]+/g, '_').slice(0, 60) || 'asset';
+  let out = path.join(assetFiles(), base + ext);
+  for (let i = 2; fs.existsSync(out); i++) out = path.join(assetFiles(), `${base} ${i}${ext}`);
+  if (path.resolve(src).startsWith(path.resolve(assetFiles()))) return src;
+  await fsp.copyFile(src, out); return out;
+});
+ipcMain.handle('assets:writeFile', async (_e, name, buf) => {
+  await fsp.mkdir(assetFiles(), { recursive: true });
+  const ext = path.extname(name); const base = path.basename(name, ext).replace(/[^\w\- ]+/g, '_').slice(0, 60) || 'asset';
+  let out = path.join(assetFiles(), base + ext);
+  for (let i = 2; fs.existsSync(out); i++) out = path.join(assetFiles(), `${base} ${i}${ext}`);
+  await fsp.writeFile(out, Buffer.from(buf)); return out;
+});
+ipcMain.handle('assets:remove', async (_e, p) => { if (p && path.resolve(p).startsWith(path.resolve(assetFiles()))) await fsp.unlink(p).catch(() => {}); return true; });
+ipcMain.handle('assets:reveal', async () => { await fsp.mkdir(assetFiles(), { recursive: true }); shell.openPath(assetFiles()); return true; });
+
 // ---------- Voice / audio effects (processed once, cached) ----------
 ipcMain.handle('voice:process', async (_e, { path: src, filter }) => {
   try {

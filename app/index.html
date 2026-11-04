@@ -16,7 +16,7 @@
       <button class="menu-btn" data-menu="clip">Clip</button>
       <button class="menu-btn" data-menu="help">Help</button>
     </div>
-    <div class="seg mode-switch" id="modeSwitch"><button data-m="video" class="on">🎬 Video</button><button data-m="photo">🖼️ Photo</button></div>
+    <div class="seg mode-switch" id="modeSwitch"><button data-m="video" class="on">🎬 Video</button><button data-m="photo">🖼️ Photo</button><button data-m="anim">✏️ Animate</button></div>
     <div class="title-wrap"><input id="projectName" class="project-name" spellcheck="false" value="Untitled project"><span id="saveState" class="save-state">Saved</span></div>
     <div class="top-right">
       <div id="collabAvatars" style="display:flex;align-items:center;padding-left:6px"></div>
@@ -47,6 +47,7 @@
         <button class="rail-btn" data-panel="stickers"><span class="ico" data-icon="smile"></span><span>Stickers</span></button>
         <button class="rail-btn" data-panel="effects"><span class="ico" data-icon="wand"></span><span>Effects</span></button>
         <button class="rail-btn" data-panel="overlays"><span class="ico" data-icon="layers"></span><span>Overlays</span></button>
+        <button class="rail-btn" data-panel="assets"><span class="ico" data-icon="bookmark"></span><span>Assets</span></button>
         <button class="rail-btn" data-panel="transitions"><span class="ico" data-icon="transition"></span><span>Transitions</span></button>
         <button class="rail-btn" data-panel="filters"><span class="ico" data-icon="filter"></span><span>Filters</span></button>
         <button class="rail-btn" data-panel="elements"><span class="ico" data-icon="shapes"></span><span>Elements</span></button>
@@ -145,6 +146,7 @@
   </aside>
   <div class="ph-status" id="phStatus"></div>
 </section>
+<section class="anim-ws" id="animWs"></section>
 <div class="modal-backdrop" id="modalBackdrop"><div class="modal" id="modal"></div></div>
 <div class="ctx-menu" id="ctxMenu"></div>
 <div class="toasts" id="toasts"></div>
@@ -166,6 +168,7 @@
 <script src="js/preview.js"></script>
 <script src="js/inspector.js"></script>
 <script src="js/fxlib.js"></script>
+  <script src="js/assets.js"></script>
   <script src="js/library.js"></script>
 <script src="js/export.js"></script>
 <script src="js/collab.js"></script>
@@ -186,6 +189,7 @@
 <script src="js/photo-panels.js"></script>
   <script src="js/photo-extra.js"></script>
   <script src="js/photo-ai.js"></script>
+  <script src="js/anim.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

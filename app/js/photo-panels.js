@@ -6,16 +6,21 @@
   // ---------- mode switching ----------
   C.setMode = (m) => {
     if (C.mode === m) return;
+    if (C.mode === 'anim' && C.anim && C.anim.playing) C.anim.stop();
     C.mode = m;
     document.body.classList.toggle('mode-photo', m === 'photo');
+    document.body.classList.toggle('mode-anim', m === 'anim');
     C.$$('#modeSwitch button').forEach((b) => b.classList.toggle('on', b.dataset.m === m));
     const menuBar = C.$('.menus');
-    menuBar.innerHTML = (m === 'photo' ? [['file', 'File'], ['edit', 'Edit'], ['image', 'Image'], ['layer', 'Layer'], ['select', 'Select'], ['filter', 'Filter'], ['view', 'View'], ['help', 'Help']] : [['file', 'File'], ['edit', 'Edit'], ['clip', 'Clip'], ['help', 'Help']]).map(([k, l]) => `<button class="menu-btn" data-menu="${k}">${l}</button>`).join('');
+    menuBar.innerHTML = (m === 'photo' ? [['file', 'File'], ['edit', 'Edit'], ['image', 'Image'], ['layer', 'Layer'], ['select', 'Select'], ['filter', 'Filter'], ['view', 'View'], ['help', 'Help']] : m === 'anim' ? [['file', 'File'], ['edit', 'Edit'], ['frame', 'Frame'], ['layer', 'Layer'], ['help', 'Help']] : [['file', 'File'], ['edit', 'Edit'], ['clip', 'Clip'], ['help', 'Help']]).map(([k, l]) => `<button class="menu-btn" data-menu="${k}">${l}</button>`).join('');
     C.app.wireMenus();
     if (m === 'photo') {
       C.engine.pause();
       if (!PU.ready) { PU.init(); PP.init(); }
       setTimeout(() => { if (P.doc) PU.fit(); PU.redraw(); PP.renderAll(); }, 30);
+    } else if (m === 'anim') {
+      C.engine.pause(); C.anim.init();
+      setTimeout(() => { C.anim._fitted = false; C.anim.fit(); C.anim.changed(true); }, 30);
     } else { C.engine.layout(); C.tl.render(); }
     C.closeMenu();
   };

@@ -30,7 +30,7 @@
     } catch (e) { console.warn('Autosave restore failed', e); C.newProject(); }
     try { const ts = JSON.parse(localStorage.getItem('cutroom.tlh') || 'null'); if (ts) document.documentElement.style.setProperty('--tl-h', ts + 'px'); } catch (_) {}
 
-    C.engine.init(); C.tl.init(); C.preview.init(); C.inspector.init(); C.library.init(); await C.home.init(); C.penMask.init(); C.tracker.init();
+    C.engine.init(); C.tl.init(); C.preview.init(); C.inspector.init(); C.library.init(); await C.home.init(); C.penMask.init(); C.tracker.init(); C.assets.init();
     C.$$('#modeSwitch button').forEach((b) => (b.onclick = () => C.setMode(b.dataset.m)));
     wireTopbar(); wireTransport(); wireTimelineToolbar(); wireKeys(); wireDrop(); wireResizer(); wireMenus();
     A.afterLoad();
@@ -131,7 +131,7 @@
   }
   function wireTopbar() {
     C.$('#btnUndo').onclick = C.undo; C.$('#btnRedo').onclick = C.redo;
-    C.$('#btnExport').onclick = () => (C.mode === 'photo' ? C.photoPanels.exportMenu(C.$('#btnExport')) : C.exporter.open('video'));
+    C.$('#btnExport').onclick = () => (C.mode === 'photo' ? C.photoPanels.exportMenu(C.$('#btnExport')) : C.mode === 'anim' ? C.anim.exportDialog() : C.exporter.open('video'));
     C.$('#btnCollab').onclick = () => C.collabUI.open();
     const pn = C.$('#projectName');
     pn.addEventListener('change', () => { const v = pn.value.trim() || 'Untitled project'; pn.value = v; C.act('Rename project', () => { C.project.name = v; }); });
@@ -200,6 +200,7 @@
     document.addEventListener('keydown', (e) => {
       if (C.modalOpen()) { if (e.key === 'Escape' && C._modalClose && C._modalDismissable !== false) C._modalClose(); return; }
       if (C.mode === 'photo' && !C.home.visible()) { C.photoPanels.key(e); return; }
+      if (C.mode === 'anim' && !C.home.visible()) { C.anim.key(e); return; }
       if (C.home.visible()) { if (e.key === 'Escape' && C.allClips().length) C.home.hide(); return; }
       const ctrl = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
@@ -383,7 +384,7 @@
       if (open) return;
       b.classList.add('open');
       const r = b.getBoundingClientRect();
-      const src = C.mode === 'photo' && C.photoPanels && C.photoPanels.menus[b.dataset.menu] ? C.photoPanels.menus : menus;
+      const src = C.mode === 'photo' && C.photoPanels && C.photoPanels.menus[b.dataset.menu] ? C.photoPanels.menus : C.mode === 'anim' && C.anim.menus[b.dataset.menu] ? C.anim.menus : menus;
       C.menu(r.left, r.bottom + 4, src[b.dataset.menu]());
       e.stopPropagation();
     }));

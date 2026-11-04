@@ -649,6 +649,7 @@
         '-',
         { label: 'Detach audio', icon: 'detach', disabled: !(c.kind === 'video' && C.hasAudio(c)), action: () => C.ops.detachAudio(c) },
         { label: 'Freeze frame here', icon: 'freeze', disabled: !(c.kind === 'video' && inside), action: () => C.ops.freeze(c) },
+        { label: 'Save to assets…', icon: 'bookmark', action: () => C.assets.saveClips(sel.length > 1 && sel.some((x) => x.id === c.id) ? sel : [c]) },
         { label: 'Track motion…', icon: 'track', disabled: c.kind !== 'video', action: () => { C.select([c.id]); C.emit('inspectTab', 'track'); } },
         { label: 'Detect beats → markers', icon: 'beat', disabled: !C.hasAudio(c), action: () => C.beats.detect(c, 4) },
         { label: 'Cut on markers', icon: 'split', disabled: c.kind === 'audio' || !Object.keys(C.project.markers).length, action: () => C.beats.splitAtMarkers(sel.length > 1 ? sel.filter((x) => x.kind !== 'audio') : [c]) },

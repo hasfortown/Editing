@@ -63,6 +63,7 @@
         for (let j = 0; j < r; j++) for (let i = 0; i < c; i++) { const s = Math.max(w / L.W, h / L.H); const sw = w / s, sh = h / s; cx.drawImage(T, (L.W - sw) / 2, (L.H - sh) / 2, sw, sh, g + i * (w + g), g + j * (h + g), w, h); }
       } },
     // ---------- Motion ----------
+    { id: 'mblur', name: 'Motion blur (follows movement)', cat: 'Motion', icon: '💨', phase: 'meta', params: [R('shutter', 'Shutter angle', 30, 720, 180, 1, '°'), R('samples', 'Quality (samples)', 4, 24, 10)] },
     { id: 'heartbeat', name: 'Heartbeat', cat: 'Motion', icon: '💓', phase: 'pre', params: [R('amount', 'Strength', 0, 100, 40), R('bpm', 'Tempo', 30, 200, 70, 1, ' bpm')],
       pre: (s, p, env) => { const ph = ((env.t * p.bpm) / 60) % 1; const beat = Math.exp(-Math.pow((ph - 0.05) / 0.05, 2)) + 0.7 * Math.exp(-Math.pow((ph - 0.25) / 0.05, 2)); s.scale *= 1 + (p.amount / 100) * 0.12 * beat; } },
     { id: 'sway', name: 'Sway', cat: 'Motion', icon: '🍃', phase: 'pre', params: [R('angle', 'Angle', 0, 30, 6, 0.5, '°'), R('speed', 'Speed', 0.2, 6, 1, 0.1)],

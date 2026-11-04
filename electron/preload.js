@@ -65,4 +65,13 @@ contextBridge.exposeInMainWorld('native', {
   decOpen: (o) => ipcRenderer.invoke('dec:open', o),
   decNext: (k, skip) => ipcRenderer.invoke('dec:next', k, skip),
   decClose: (k) => ipcRenderer.invoke('dec:close', k),
+  fileSaveDialog: (o) => ipcRenderer.invoke('file:saveDialog', o),
+  fileOpenDialog: (o) => ipcRenderer.invoke('file:openDialog', o),
+  animAutoPath: (n, ext) => ipcRenderer.invoke('anim:autoPath', n, ext),
+  assetsLoad: () => ipcRenderer.invoke('assets:load'),
+  assetsSave: (l) => ipcRenderer.invoke('assets:save', l),
+  assetsCopyIn: (p) => ipcRenderer.invoke('assets:copyIn', p),
+  assetsWriteFile: (n, b) => ipcRenderer.invoke('assets:writeFile', n, b),
+  assetsRemove: (p) => ipcRenderer.invoke('assets:remove', p),
+  assetsReveal: () => ipcRenderer.invoke('assets:reveal'),
 });

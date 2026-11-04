@@ -191,7 +191,10 @@
     { label: 'Auto color', icon: 'droplet', key: 'Ctrl+Shift+B', disabled: !P.doc, action: () => A.auto('color') },
     '-', ...baseImage()];
   PP.menus.select = () => { const m = baseSelect(); m.splice(5, 0, { label: 'Select subject', icon: 'sparkles', disabled: !P.doc, action: () => A.removeBackground(true) }); return m; };
-  PP.menus.layer = () => { const m = baseLayer(); const i = m.findIndex((x) => x.label === 'Layer styles…'); m.splice(i, 0, { label: 'Remove background', icon: 'wand2', disabled: !P.active(), action: () => A.removeBackground(false) }); return m; };
+  PP.menus.layer = () => { const m = baseLayer(); const i = m.findIndex((x) => x.label === 'Layer styles…'); m.splice(i, 0, { label: 'Remove background', icon: 'wand2', disabled: !P.active(), action: () => A.removeBackground(false) }, { label: 'Save layer to assets', icon: 'bookmark', disabled: !P.active(), action: () => { const L = P.active(); const px = P.renderLayerPixels(L, P.doc.w, P.doc.h); const c = P.mk(P.doc.w, P.doc.h); c.getContext('2d').drawImage(px, 0, 0); C.assets.saveImage(trimCanvas(c), L.name || 'Layer'); } }, { label: 'Save whole image to assets', icon: 'bookmark', disabled: !P.doc, action: () => C.assets.saveImage(P.flattened(), P.doc.name || 'Image') }); return m; };
+  const baseFile = PP.menus.file;
+  PP.menus.file = () => { const m = baseFile(); const i = m.findIndex((x) => x.label === 'Place image as layer…'); m.splice(i + 1, 0, { label: 'Place from assets…', icon: 'bookmark', action: async () => { const a = await C.assets.pick(['image'], 'Place an image from your assets'); if (a) C.assets.toPhoto(a); } }); return m; };
+  function trimCanvas(c) { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1; for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (d[(y * c.width + x) * 4 + 3] > 4) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } if (x1 < 0) return c; const o = P.mk(x1 - x0 + 1, y1 - y0 + 1); o.getContext('2d').drawImage(c, -x0, -y0); return o; }
   const baseKey = PP.key;
   PP.key = (e) => {
     if (C.mode === 'photo' && !C.isTyping()) {

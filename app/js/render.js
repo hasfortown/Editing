@@ -297,7 +297,35 @@
   }
 
   // Draw one clip. o: {alpha, dx, dy, scale, rot, blur, clipFn, g3:{rx,ry,tx,tz}}
+  // ---------- motion blur: average sub-frame samples while the clip is moving ----------
+  C.mblurOf = (c) => {
+    if (c.mblur && c.mblur.on) return c.mblur;
+    const e = (c.effects || []).find((x) => x.type === 'mblur' && x.on !== false); return e ? { on: true, shutter: e.p.shutter, samples: e.p.samples } : null;
+  };
+  function poseAt(c0, tt, W, H) {
+    const l = C.clamp(tt - c0.start, 0, c0.duration); const c = C.evalClip(c0, l); const an = animState(c, l);
+    const s = { dx: an.dx, dy: an.dy, scale: an.scale, rot: an.rot, alpha: an.alpha, blur: 0 };
+    if (c.effects && c.effects.length && C.fx) C.fx.applyPre(s, c.effects, { W, H, t: l, T: tt, dur: c.duration, seed: C.fx.seedOf(c.id) });
+    const tt3 = c.t; return [tt3.x * W + s.dx * W, tt3.y * H + s.dy * H, tt3.scale * s.scale * Math.min(W, H), (tt3.rotation + s.rot) * Math.min(W, H) / 90, (tt3.rx || 0) * Math.min(W, H) / 90, (tt3.ry || 0) * Math.min(W, H) / 90];
+  }
   C.drawClip = (ctx, c0, t, W, H, src, o = {}) => {
+    const mb = !o.noMB && c0.kind !== 'effect' && c0.kind !== 'audio' ? C.mblurOf(c0) : null;
+    if (!mb) return drawClipCore(ctx, c0, t, W, H, src, o);
+    const fps = C.fps(), dt = ((mb.shutter ?? 180) / 360) / fps;
+    const a = poseAt(c0, t, W, H), b = poseAt(c0, t - dt, W, H);
+    let move = 0; for (let i = 0; i < a.length; i++) move = Math.max(move, Math.abs(a[i] - b[i]));
+    if (move < 0.75) return drawClipCore(ctx, c0, t, W, H, src, o);
+    const n = Math.round(C.clamp(Math.min(mb.samples || 10, 4 + move / 3), 3, C.UI.playing ? 7 : 24));
+    const acc = C.trOffscreen('mbAcc', W, H), tmp = C.trOffscreen('mbTmp', W, H);
+    for (let i = 0; i < n; i++) {
+      const ti = t - dt * (i / (n - 1));
+      tmp.setTransform(1, 0, 0, 1, 0, 0); tmp.globalAlpha = 1; tmp.globalCompositeOperation = 'source-over'; tmp.filter = 'none'; tmp.clearRect(0, 0, W, H);
+      drawClipCore(tmp, c0, ti, W, H, src, Object.assign({}, o, { noMB: true }));
+      acc.globalAlpha = 1 / (i + 1); acc.drawImage(tmp.canvas, 0, 0);
+    }
+    ctx.save(); ctx.globalCompositeOperation = c0.blend || 'source-over'; ctx.drawImage(acc.canvas, 0, 0, W, H); ctx.restore();
+  };
+  const drawClipCore = (ctx, c0, t, W, H, src, o = {}) => {
     const local = t - c0.start;
     const c = C.evalClip(c0, Math.min(local, c0.duration + 10));
     if (c.kind === 'effect') return drawEffectClip(ctx, c, t, local, W, H, o);

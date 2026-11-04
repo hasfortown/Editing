@@ -1,26 +1,22 @@
 ## Download
-Click **Cutroom-Setup-1.5.0.exe** under *Assets* below, then run it. It updates your existing install.
+Click **Cutroom-Setup-1.6.0.exe** under *Assets* below, then run it. It updates your existing install.
 If Windows SmartScreen says "Windows protected your PC", click **More info → Run anyway**.
 
-## What's new in 1.5
+## What's new in 1.6
 
-- **63 transitions** (up from 21), in 6 groups:
-  - **Basic:** flash, overexpose, noise dissolve, and more.
-  - **Slide & push:** push in every direction, whip pans with motion blur, squeeze, stretch, bounce drop, and split open.
-  - **Wipes & shapes:** soft, diagonal, and clock wipes; circle, iris, diamond, star, and heart reveals; blinds, checkerboard, and tiles.
-  - **Zoom & spin:** punch in, pull out, spin blur, rotate zoom, and shake.
-  - **3D:** cube up, page turn, and fold.
-  - **Glitch & light:** RGB glitch, pixelate, ripple, ink bleed, light leak, and film burn.
-- **35 new effects** (77 in total), plus 6 new preset looks:
-  - **Distortions:** tilt-shift miniature, bulge/fisheye, swirl, water ripple, heat haze, radial spin blur, and split screen/tiles.
-  - **Motion:** heartbeat, sway, bounce, earthquake, punch zoom, Ken Burns pan, and wobble.
-  - **Color:** noir, sepia, invert, thermal camera, night vision, color pop (keep one color), teal & orange, rainbow shift, and bleach bypass.
-  - **Retro:** halftone, CRT monitor, 8-bit game, datamosh, and film scratches & dust.
-  - **Light:** god rays, neon edges, disco lights, blink, and shine sweep.
-  - **Stylize:** pencil sketch, comic book, ASCII art, and outline.
-- **Live previews, CapCut style:**
-  - Every transition card shows the real transition and plays it when you hover, using your own footage when you've imported some.
-  - Effect cards animate smoothly on hover.
-  - **Try-on:** hovering an effect previews it live on the player, on the selected clip or the clip under the playhead, before you click to apply.
-  - Transitions now have search and categories.
-- **Smoother feel:** spring-in modals, menus, and toasts; press feedback on buttons and cards; animated slider thumbs; panel fade-ins; clips that pop in when added; slimmer scrollbars; and an "applied" pulse on cards. All of it respects Windows' *reduce motion* setting.
+- **✏️ Animate, a third app** (home page, or **Animate** at the top), for making 2D animations:
+  - **Drawing:** draw frame by frame with brush, pencil, eraser, fill, line, rectangle, and ellipse, with **onion skin** showing the previous frames in red and the next in green.
+  - **Moving objects:** add text, emoji, shapes, and images (including from your assets), then animate them with **keyframes and easing** (overshoot, bounce, elastic…). You can see the motion path, and one-click motions include pop in, slide, bounce, spin, and wiggle.
+  - **Timeline:** layers, keyframe and blank-keyframe controls, insert and delete frames, FPS, looping playback, and undo/redo.
+  - **Export:** MP4, **GIF**, WebM, or PNG frames, or **send straight to the video editor**. Save and open `.cutanim` projects.
+  - There's a bouncing-ball demo to learn from.
+- **📚 Asset library ("asset saver"):**
+  - Save clips, titles, stickers, images, video, and music once, and reuse them in every project.
+  - Right-click a clip → *Save to assets*, or use the new **Assets** panel. In the photo editor, use *Layer → Save layer to assets* and *File → Place from assets*.
+  - Your assets are kept in your own app-data folder.
+- **💨 Real motion blur:**
+  - Clips blur along their actual movement (keyframes, animations, shake, spins, and zooms), like a camera shutter.
+  - Turn it on in the Video tab (shutter angle and quality), or use the *Motion blur* effect.
+- **🏠 New home page:**
+  - Three app cards with live animated previews and a 3D tilt, plus an interactive particle background that reacts to your mouse.
+  - Rotating tips, plus quick-start options for each app.

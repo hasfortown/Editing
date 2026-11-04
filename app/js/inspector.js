@@ -22,7 +22,7 @@
 
   function computeKey() {
     const s = C.selectedClips();
-    return s.map((c) => c.id + ':' + c.kind + ':' + !!c.transition + ':' + c.freeze + ':' + (c.effects || []).map((e) => e.id + (e.on === false ? '0' : '1') + (e.p.area || '')).join('.') + ':' + (c.tracks || []).map((t) => t.id + t.name + (t.fast ? 1 : 0) + (t.adapt === false ? 0 : 1) + '#' + Object.keys(t.pts || {}).length).join('.')).join(',') + '|' + (s.length ? '' : C.project.settings.aspect);
+    return s.map((c) => c.id + ':' + c.kind + ':' + !!c.transition + ':' + c.freeze + ':' + (c.mblur && c.mblur.on ? 'M' : '') + ':' + (c.effects || []).map((e) => e.id + (e.on === false ? '0' : '1') + (e.p.area || '')).join('.') + ':' + (c.tracks || []).map((t) => t.id + t.name + (t.fast ? 1 : 0) + (t.adapt === false ? 0 : 1) + '#' + Object.keys(t.pts || {}).length).join('.')).join(',') + '|' + (s.length ? '' : C.project.settings.aspect);
   }
   function refresh() { for (const r of refreshers) try { r(); } catch (_) {} }
 
@@ -217,6 +217,13 @@
     [['Tilt back', { rx: 35 }], ['Lean left', { ry: 35 }], ['Lean right', { ry: -35 }], ['Floor', { rx: 60, z: 10 }], ['Flip', { ry: 180 }]].forEach(([l, v]) => { const b = C.h(`<button class="chip">${l}</button>`); b.onclick = () => { C.begin(); Object.assign(c.t, v); commit('3D preset'); refresh(); }; q3.appendChild(b); });
     t3.appendChild(q3);
     t3.appendChild(C.h('<p class="hint">Animate with ◆ for 3D flips, spins and camera moves. 3D transitions (cube, card flip…) are in Transitions.</p>'));
+    const mbs = section(body, 'Motion blur');
+    sw(mbs, 'Motion blur', () => !!(c.mblur && c.mblur.on), (v) => { c.mblur = Object.assign({ shutter: 180, samples: 10 }, c.mblur || {}, { on: v }); });
+    if (c.mblur && c.mblur.on) {
+      slider(mbs, 'Shutter angle', () => c.mblur.shutter ?? 180, (v) => { c.mblur = Object.assign({}, c.mblur, { shutter: Math.round(v) }); }, { min: 30, max: 720, step: 1, unit: '°', def: 180 });
+      slider(mbs, 'Quality', () => c.mblur.samples ?? 10, (v) => { c.mblur = Object.assign({}, c.mblur, { samples: Math.round(v) }); }, { min: 4, max: 24, step: 1, def: 10 });
+    }
+    mbs.appendChild(C.h('<p class="hint">Blurs the clip along its movement — keyframed moves, animations, shake, spins and zooms — like a real camera shutter. 180° looks natural; higher = longer streaks.</p>'));
     const wp = section(body, 'Warp & wrap');
     select(wp, 'Style', C.geo.WARPS, () => (c.warp && c.warp.mode) || 'none', (v) => { if (v === 'none') c.warp = null; else c.warp = Object.assign({ amount: 50, speed: 1, freq: 2, spin: 0.6 }, c.warp || {}, { mode: v }); setTimeout(() => I.render(true), 0); });
     if (c.warp && c.warp.mode && c.warp.mode !== 'none') {
