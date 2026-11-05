@@ -102,6 +102,10 @@
       room = rnd(6); secret = rnd(10);
       try { hostSig = await signal(hostIdOf(room)); break; } catch (e) { if (e.message !== 'ID-TAKEN' || attempt === 2) throw e; }
     }
+    // make sure the service really relays messages on this network (some firewalls/proxies only half-allow it)
+    const nonce = rnd(8);
+    const echoed = await new Promise((res) => { const t = setTimeout(() => res(false), 6000); hostSig.on = (m) => { if (m.payload && m.payload.ping === nonce) { clearTimeout(t); res(true); } }; hostSig.onclose = () => { clearTimeout(t); res(false); }; hostSig.send('CANDIDATE', hostIdOf(room), { ping: nonce }); });
+    if (!echoed) { hostSig.onclose = null; hostSig.close(); hostSig = null; throw new Error('this network blocks the connection service'); }
     hostKey = await keyFor(room, secret); NET.role = 'host';
     K.netCode = fmt(room + secret);
     hostSig.on = async (m) => {
