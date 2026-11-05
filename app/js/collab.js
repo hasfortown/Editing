@@ -19,6 +19,12 @@
     return any ? out : null;
   };
 
+  // one place to send / receive — LAN guests & the host go through the main process, internet guests over WebRTC
+  const handlers = [];
+  K.onMessage = (fn) => handlers.push(fn);
+  K.dispatch = (m) => { for (const h of handlers) { try { h(m); } catch (e) { console.warn(e); } } };
+  N.onCollab('message', (m) => K.dispatch(m));
+  K.send = (m) => (K.net && K.net.isGuest() ? K.net.send(m) : N.collabSend(m));
   K.status = () => ({ mode: K.mode, peers: peers.size, info });
   K.myId = () => myId;
   K.peers = () => [...peers.values()];
@@ -26,7 +32,7 @@
   K.fetchMedia = async (m, onProgress) => {
     const handler = (id, v) => { if (id === m.id) onProgress(v); };
     progressHandlers.add(handler);
-    try { const r = await N.collabFetchMedia({ id: m.id, ext: m.ext || C.extOf(m.path) }); return r.ok ? r.path : null; }
+    try { if (K.net && K.net.isGuest()) return await K.net.fetchMedia(m, onProgress); const r = await N.collabFetchMedia({ id: m.id, ext: m.ext || C.extOf(m.path) }); return r.ok ? r.path : null; }
     finally { progressHandlers.delete(handler); }
   };
   const progressHandlers = new Set();
@@ -43,7 +49,7 @@
     seq++;
     for (const k of keysOf(d)) pendingOwn.set(k, seq);
     C.applyDiff(lastSynced, d);
-    N.collabSend({ t: 'op', seq, diff: d });
+    K.send({ t: 'op', seq, diff: d });
     if (d.media) for (const id in d.media) if (d.media[id]) shareMedia(id);
   }, 60);
 
@@ -54,16 +60,16 @@
     if (K.mode === 'host') { sent.add(id); N.collabRegisterMedia(id, p); }
     else if (K.mode === 'guest' && C.localImports.has(id)) {
       sent.add(id);
-      N.collabUpload({ id, filePath: p, ext: m.ext || C.extOf(p) }).then((ok) => { if (!ok) { sent.delete(id); C.toast(`Could not send ${m.name} to the session`, 'err'); } });
+      (K.net && K.net.isGuest() ? K.net.upload(id, p, m.ext || C.extOf(p)) : N.collabUpload({ id, filePath: p, ext: m.ext || C.extOf(p) })).then((ok) => { if (!ok) { sent.delete(id); C.toast(`Could not send ${m.name} to the session`, 'err'); } });
     }
   }
 
   C.on('change', (i) => { if (K.mode !== 'off' && i.source !== 'remote') flush(); });
-  const presence = C.throttle(() => { if (K.mode !== 'off') N.collabSend({ t: 'presence', playhead: C.UI.playhead, selection: [...C.selection], mode: C.mode || 'video' }); }, 150);
+  const presence = C.throttle(() => { if (K.mode !== 'off') K.send({ t: 'presence', playhead: C.UI.playhead, selection: [...C.selection], mode: C.mode || 'video' }); }, 150);
   C.on('time', presence); C.on('select', presence); C.on('modeChanged', presence); C.on('collab', () => setTimeout(presence, 300));
   K.where = (m) => ({ photo: '🖼️ Photo editor', anim: '✏️ Animate', video: '🎬 Video editor' })[m || 'video'];
 
-  N.onCollab('message', (m) => {
+  K.onMessage((m) => {
     if (m.t === 'op') {
       let d = m.diff;
       if (m.from === myId) {
@@ -107,16 +113,19 @@
     startSync();
     for (const id in C.project.media) shareMedia(id);
     C.emit('collab'); C.emit('peers');
+    if (K.net) K.net.startHost().then(() => C.emit('collab')).catch((e) => { console.warn(e); K.netError = e.message; C.emit('collab'); });
     return true;
   };
   K.join = async ({ address, port, pin, name }) => {
     const r = await N.collabJoin({ address, port, pin, name });
     if (!r.ok) { C.toast(r.error, 'err', 5000); return false; }
-    const w = r.welcome;
+    return K.afterWelcome(r.welcome, { hostName: r.welcome.hostName, address, port });
+  };
+  K.afterWelcome = (w, inf) => {
     C.engine.pause();
     C.loadProjectData(w.state, null);
     C.UI.dirty = true;
-    K.mode = 'guest'; myId = w.you; myColor = w.color; info = { hostName: w.hostName, address, port };
+    K.mode = 'guest'; myId = w.you; myColor = w.color; info = inf;
     peers.clear(); for (const p of w.peers) peers.set(p.id, p);
     startSync();
     C.app.afterLoad();
@@ -125,7 +134,9 @@
     return true;
   };
   K.leave = async () => {
+    if (K.net && K.net.isGuest()) K.net.leave();
     await N.collabLeave();
+    if (K.net) setTimeout(() => K.net.leave(), 600); // let the 'session ended' message reach internet guests first
     K.mode = 'off'; peers.clear(); myId = null; info = null;
     C.emit('collab'); C.emit('peers');
   };
@@ -203,6 +214,12 @@
   UI.joinWithCode = async (code, address = null, port = null, knownName = null) => {
     const raw = String(code || '').trim();
     let target = null;
+    if (K.net && K.net.isCode(raw)) {
+      if (K.mode !== 'off') { if (!(await C.confirm('Leave current session?', 'You are already in a session.', 'Leave'))) return false; await K.leave(); }
+      const name = knownName || await ensureName(); if (!name) return false;
+      C.toast('Connecting over the internet…', 'info', 2500);
+      return K.net.join(raw, name);
+    }
     if (/^\d{6}$/.test(raw) && address) target = { address, port, pin: raw };
     else target = K.readCode(raw);
     if (!target) { C.toast('That join code doesn’t look right — check it and try again', 'err', 4000); return false; }
@@ -236,11 +253,11 @@
     el.querySelector('#cChange').onclick = async () => { close(); const n = await askName(); if (n) openStart(n); };
     el.querySelector('#cHost').onclick = async () => { if (await K.host(name)) { close(); openSession(); } };
     const codeEl = el.querySelector('#cCode');
-    codeEl.addEventListener('input', () => { const v = codeEl.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 12); codeEl.value = v.replace(/(.{4})(?=.)/g, '$1-'); });
+    codeEl.addEventListener('input', () => { const v = codeEl.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 16); codeEl.value = v.replace(/(.{4})(?=.)/g, '$1-'); });
     codeEl.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') el.querySelector('#cJoin').click(); });
     el.querySelector('#cJoin').onclick = async () => {
       const v = codeEl.value;
-      if (!K.readCode(v)) { C.toast('That join code doesn’t look right — check it and try again', 'err', 4000); codeEl.focus(); return; }
+      if (!K.readCode(v) && !(K.net && K.net.isCode(v))) { C.toast('That join code doesn’t look right — check it and try again', 'err', 4000); codeEl.focus(); return; }
       close(); if (!(await UI.joinWithCode(v, null, null, name))) setTimeout(() => openStart(name), 50);
     };
     const list = el.querySelector('#cList');
@@ -270,9 +287,9 @@
       const people = [{ name: (myName() || 'You') + ' (you)', color: myColor || colorFor(myName() || 'You'), mode: C.mode }, ...ps];
       body.innerHTML = `<div class="modal-head"><h2>${K.mode === 'host' ? 'Hosting live session' : 'Connected to ' + C.esc(info.hostName)}</h2><button class="icon-btn" data-x>${C.icon('x')}</button></div>
         <div class="modal-body">
-          ${K.mode === 'host' ? (() => { const codes = K.codes(); return `<div class="code-hero"><div class="hint">Your join code</div><div class="join-code" id="cCodeBig">${codes[0] ? codes[0].code : '—'}</div><button class="btn" id="cCopy">${C.icon('copy')}<span>Copy code</span></button></div>
-            <p class="hint" style="text-align:center;margin:10px 0 0">Friends open <b style="color:var(--text)">Collaborate</b> in Cutroom (or the home screen), enter this code and join you instantly.</p>
-            ${codes.length > 1 ? `<details style="margin-top:8px"><summary class="hint" style="cursor:pointer;text-align:center">Code not working? Try another network adapter's code</summary><div style="display:grid;gap:6px;margin-top:8px">${codes.slice(1).map((c) => `<div class="hint" style="text-align:center"><span class="kbd">${c.code}</span> <span>(${C.esc(c.name)})</span></div>`).join('')}</div></details>` : ''}`; })() : `<p class="hint" style="margin-top:0">Edits you make are sent to everyone instantly. Media you import is uploaded to the session automatically.</p>`}
+          ${K.mode === 'host' ? (() => { const codes = K.codes(); const net = K.netCode; return `<div class="code-hero"><div class="hint">${net ? '🌍 Join code — works from anywhere with internet' : K.netError ? 'Join code (same Wi-Fi only — internet unavailable)' : 'Setting up internet access…'}</div><div class="join-code ${net ? 'net' : ''}" id="cCodeBig">${net || (codes[0] ? codes[0].code : '—')}</div><button class="btn" id="cCopy">${C.icon('copy')}<span>Copy code</span></button></div>
+            <p class="hint" style="text-align:center;margin:10px 0 0">Friends open <b style="color:var(--text)">Collaborate</b> in Cutroom (or the home screen), enter this code and join you — ${net ? 'on any Wi-Fi, anywhere' : 'they need to be on your Wi-Fi'}.</p>
+            ${net && codes.length ? `<details style="margin-top:8px"><summary class="hint" style="cursor:pointer;text-align:center">On the same Wi-Fi? Faster local code</summary><div style="display:grid;gap:6px;margin-top:8px">${codes.map((c) => `<div class="hint" style="text-align:center"><span class="kbd">${c.code}</span> <span>(${C.esc(c.name)})</span></div>`).join('')}</div></details>` : ''}${K.netError ? `<p class="hint" style="text-align:center;color:var(--danger)">Internet joining isn't available right now (${C.esc(K.netError)}). People on your Wi-Fi can still join.</p>` : ''}`; })() : `<p class="hint" style="margin-top:0">Edits you make are sent to everyone instantly. Media you import is uploaded to the session automatically.</p>`}
           <div class="collab-shared"><div><b>Work on anything together</b><span class="hint">Video edits sync live. In the 🖼️ Photo editor you share one image (perfect for thumbnails) — everyone sees each other's cursor and layers update as you work.</span></div>${C.photo && C.photo.doc ? `<button class="btn" id="cSharePhoto">${C.icon('photo')}<span>Share “${C.esc(C.photo.doc.name)}”</span></button>` : ''}</div>
           <div class="section-title" style="margin-top:18px"><span>People (${people.length})</span></div>
           <div style="display:grid;gap:8px">${people.map((p) => `<div style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color};color:#000;display:grid;place-items:center;font-weight:700">${C.esc((p.name || '?')[0].toUpperCase())}</span><span>${C.esc(p.name)}<small class="muted" style="display:block;font-size:11px">${K.where(p.mode)}</small></span>${p.playhead != null && (p.mode || 'video') === 'video' ? `<span class="muted" style="margin-left:auto;font-family:var(--mono);font-size:11.5px">${C.fmtTC(p.playhead, C.fps())}</span>` : ''}</div>`).join('')}</div>

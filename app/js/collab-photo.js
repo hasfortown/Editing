@@ -34,14 +34,14 @@
       const msg = { t: 'pl', doc: uid, id: L.id, meta: metaOf(L), seq: ++seq };
       if (!old || old.cid !== s.cid) { msg.canvas = toPng(L.canvas); msg.hasCanvas = !!L.canvas; }
       if (!old || old.mid !== s.mid) { msg.mask = toPng(L.mask); msg.hasMask = !!L.mask; }
-      N.collabSend(msg); PS.sigs.set(L.id, s); pendL.set(L.id, msg.seq); sent++;
+      K.send(msg); PS.sigs.set(L.id, s); pendL.set(L.id, msg.seq); sent++;
     }
     const order = orderStr(), meta = metaStr();
     if (full || sent || revive.length || order !== PS.order || meta !== PS.meta) {
       const removed = full ? [] : [...PS.sigs.keys()].filter((id) => !P.doc.layers.some((l) => l.id === id));
       for (const id of removed) { PS.sigs.delete(id); dead.add(id); }
       pendD = ++seq;
-      N.collabSend({ t: 'pd', doc: uid, w: P.doc.w, h: P.doc.h, title: P.doc.name, order: P.doc.layers.map((l) => l.id), removed, revive, full, seq: pendD });
+      K.send({ t: 'pd', doc: uid, w: P.doc.w, h: P.doc.h, title: P.doc.name, order: P.doc.layers.map((l) => l.id), removed, revive, full, seq: pendD });
       PS.order = order; PS.meta = meta; PS.uid = uid;
     }
     return true;
@@ -52,7 +52,7 @@
   // ---------- receiving (strictly in hub order) ----------
   let queue = Promise.resolve();
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  N.onCollab('message', (m) => {
+  K.onMessage((m) => {
     if (m.t === 'pc') { PS.cursors.set(m.from, { name: m.name, color: m.color, x: m.x, y: m.y, doc: m.doc, layer: m.layer, at: Date.now() }); C.photoUI && C.photoUI.ready && C.photoUI.redraw(); markLayers(); return; }
     if (m.t === 'preq') { if (P.doc && docUid() === m.doc) PS.flush(true); return; }
     if (m.t === 'join' && K.mode === 'host' && P.doc) { setTimeout(() => PS.flush(true), 400); return; }
@@ -77,7 +77,7 @@
     PS.flush(false);                     // send anything local first, so nothing gets overwritten silently
     const sameDoc = P.doc && docUid() === m.doc;
     const st = PS.stash && PS.stash.doc === m.doc ? PS.stash.layers : new Map(); PS.stash = null;
-    if (!sameDoc && !m.full) { N.collabSend({ t: 'preq', doc: m.doc }); return; }
+    if (!sameDoc && !m.full) { K.send({ t: 'preq', doc: m.doc }); return; }
     PS.applying = true;
     try {
       const local = new Map(sameDoc ? P.doc.layers.map((l) => [l.id, l]) : []);
@@ -108,7 +108,7 @@
         m.order.forEach((id, i) => { if (!ids.includes(id) && st.has(id) && !removed.has(id)) { const prev = i > 0 ? ids.indexOf(m.order[i - 1]) : -1; ids.splice(prev + 1, 0, id); } });
         layers = ids.map((id) => { const inc = st.get(id); const L = local.get(id) || (inc && (inc.meta.type !== 'raster' || inc.canvas) ? P.layer({ id }) : null); return L ? upd(L, inc) : null; }).filter(Boolean);
       }
-      if (broken()) { layers = layers.filter((L) => !(L.type === 'raster' && !L.canvas)); setTimeout(() => N.collabSend({ t: 'preq', doc: m.doc }), 50); }
+      if (broken()) { layers = layers.filter((L) => !(L.type === 'raster' && !L.canvas)); setTimeout(() => K.send({ t: 'preq', doc: m.doc }), 50); }
       if (!sameDoc) {
         const had = !!P.doc;
         P.doc = { w: m.w, h: m.h, name: m.title, path: null, layers, active: (layers[layers.length - 1] || {}).id, _sid: m.doc };
@@ -132,11 +132,11 @@
   }
 
   // ---------- presence: live cursors & who's on which layer ----------
-  const sendCursor = C.throttle((x, y) => { if (on() && P.doc) N.collabSend({ t: 'pc', doc: docUid(), x, y, layer: P.doc.active }); }, 70);
+  const sendCursor = C.throttle((x, y) => { if (on() && P.doc) K.send({ t: 'pc', doc: docUid(), x, y, layer: P.doc.active }); }, 70);
   PS.init = () => {
     const view = C.$('#phView'); if (!view || PS._wired) return; PS._wired = true;
     view.addEventListener('pointermove', (e) => { if (!on() || !P.doc) return; const r = view.getBoundingClientRect(); const v = C.photoUI.view; sendCursor((e.clientX - r.left - v.ox) / v.z, (e.clientY - r.top - v.oy) / v.z); });
-    view.addEventListener('pointerleave', () => { if (on() && P.doc) N.collabSend({ t: 'pc', doc: docUid(), x: null, y: null, layer: P.doc.active }); });
+    view.addEventListener('pointerleave', () => { if (on() && P.doc) K.send({ t: 'pc', doc: docUid(), x: null, y: null, layer: P.doc.active }); });
     C.photoUI.overlayHooks.push((ox) => {
       if (!on() || !P.doc) return; const uid = docUid(); const now = Date.now();
       for (const [, c] of PS.cursors) {

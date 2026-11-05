@@ -12,6 +12,8 @@ const APP_DIR = path.join(__dirname, '..', 'app');
 
 // Make WebGL (used for color grading) available even on GPUs Chromium blocklists
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
+// internet collaboration: let WebRTC use real local addresses (mDNS names don't resolve on many networks)
+app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns');
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 
 protocol.registerSchemesAsPrivileged([
@@ -438,6 +440,13 @@ ipcMain.handle('collab:fetchMedia', async (_e, o) => collab.fetchMedia(o));
 ipcMain.handle('collab:discoverStart', async () => collab.discoverStart());
 ipcMain.handle('collab:discoverStop', async () => collab.discoverStop());
 ipcMain.handle('collab:info', async () => collab.info());
+ipcMain.handle('collab:rtcOpen', async (_e, name) => collab.rtcOpen(name));
+ipcMain.handle('collab:rtcIn', async (_e, vid, data) => { collab.rtcIn(vid, data); return true; });
+ipcMain.handle('collab:rtcClose', async (_e, vid) => { collab.rtcClose(vid); return true; });
+ipcMain.handle('collab:rtcMediaPath', async (_e, id) => collab.rtcMediaPath(id));
+ipcMain.handle('collab:rtcCachePath', async (_e, id, ext) => collab.rtcCachePath(id, ext));
+ipcMain.handle('collab:rtcMediaSaved', async (_e, id, p) => { collab.rtcMediaSaved(id, p); return true; });
+ipcMain.handle('fs:appendBinary', async (_e, p, buf) => { await fsp.appendFile(p, Buffer.from(buf)); return true; });
 app.on('before-quit', () => { try { collab && collab.leave(); } catch (_) {} });
 
 // ---------- Share packages ----------

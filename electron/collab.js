@@ -137,6 +137,7 @@ function create({ send, userDir }) {
       broadcast(h, m); send('collab:message', m);
     });
     ws.on('error', () => {});
+    return id;
   }
 
   async function handleHttp(h, req, res) {
@@ -274,7 +275,30 @@ function create({ send, userDir }) {
   function emitSessions() { send('collab:sessions', [...sessions.values()]); }
   function discoverStop() { if (!discovery) return; clearInterval(discovery.prune); try { discovery.s.close(); } catch (_) {} discovery = null; }
 
+  // ---------------- INTERNET GUESTS (WebRTC, bridged by the host's window) ----------------
+  // An internet guest is a "virtual" client of the hub: same welcome / ordering / broadcast logic as LAN guests.
+  const EventEmitter = require('events');
+  const virt = new Map();
+  function rtcOpen(name) {
+    if (!hub) return { ok: false, error: 'Not hosting' };
+    const ee = new EventEmitter(); let vid = null;
+    const ws = { readyState: 1, send: (s) => { if (vid) send('collab:rtcOut', vid, String(s)); }, close: () => { ws.readyState = 3; if (vid) { send('collab:rtcKill', vid); virt.delete(vid); } }, on: (e, f) => ee.on(e, f) };
+    vid = onGuest(hub, ws, String(name || 'Guest'));
+    virt.set(vid, ee);
+    return { ok: true, id: vid };
+  }
+  const rtcIn = (vid, data) => { const ee = virt.get(vid); if (ee) ee.emit('message', String(data)); };
+  const rtcClose = (vid) => { const ee = virt.get(vid); if (ee) { virt.delete(vid); ee.emit('close'); } };
+  const rtcMediaPath = (id) => (hub && hub.media.get(id)) || null;
+  async function rtcCachePath(id, ext) {
+    const dir = hub ? hub.cacheDir : path.join(userDir, 'collab', 'net'); await fsp.mkdir(dir, { recursive: true });
+    const p = path.join(dir, `${String(id).replace(/[^\w-]/g, '')}.${String(ext || 'bin').replace(/[^\w]/g, '').slice(0, 8)}`);
+    await fsp.writeFile(p, Buffer.alloc(0)); return p;
+  }
+  function rtcMediaSaved(id, p) { if (!hub) return; hub.media.set(id, p); send('collab:mediaArrived', id, p); broadcast(hub, { t: 'media', id }); }
+
   return {
+    rtcOpen, rtcIn, rtcClose, rtcMediaPath, rtcCachePath, rtcMediaSaved,
     host, join, leave, sendMsg, fetchMedia, upload, discoverStart, discoverStop,
     provideState: (reqId, state) => { if (!hub) return; const f = hub.pendingState.get(reqId); if (f) { hub.pendingState.delete(reqId); f(state); } },
     registerMedia: (id, p) => { if (hub && p) hub.media.set(id, p); },

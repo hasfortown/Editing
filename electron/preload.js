@@ -40,6 +40,13 @@ contextBridge.exposeInMainWorld('native', {
   collabDiscoverStart: () => ipcRenderer.invoke('collab:discoverStart'),
   collabDiscoverStop: () => ipcRenderer.invoke('collab:discoverStop'),
   collabInfo: () => ipcRenderer.invoke('collab:info'),
+  collabRtcOpen: (name) => ipcRenderer.invoke('collab:rtcOpen', name),
+  collabRtcIn: (vid, d) => ipcRenderer.invoke('collab:rtcIn', vid, d),
+  collabRtcClose: (vid) => ipcRenderer.invoke('collab:rtcClose', vid),
+  collabRtcMediaPath: (id) => ipcRenderer.invoke('collab:rtcMediaPath', id),
+  collabRtcCachePath: (id, ext) => ipcRenderer.invoke('collab:rtcCachePath', id, ext),
+  collabRtcMediaSaved: (id, p) => ipcRenderer.invoke('collab:rtcMediaSaved', id, p),
+  appendBinary: (p, b) => ipcRenderer.invoke('fs:appendBinary', p, b),
   onCollab: (ch, cb) => ipcRenderer.on('collab:' + ch, (_e, ...a) => cb(...a)),
   // sharing
   sharePack: (o) => ipcRenderer.invoke('share:pack', o),

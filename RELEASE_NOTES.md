@@ -1,22 +1,19 @@
 ## Download
-Click **Cutroom-Setup-1.7.0.exe** under *Assets* below, then run it. It updates your existing install.
+Click **Cutroom-Setup-1.8.0.exe** under *Assets* below, then run it. It updates your existing install.
 If Windows SmartScreen says "Windows protected your PC", click **More info → Run anyway**.
-**Collaborating?** Everyone in the session should update to 1.7 — photo sharing needs it on both computers.
+**Collaborating?** Everyone in the session needs 1.8 for internet codes.
 
-## What's new in 1.7
+## What's new in 1.8
 
-- **🤝 Collaboration on thumbnails and images:**
-  - The **photo editor is now live and shared**, so two (or more) people can work on the same thumbnail, poster, or image at the same time.
-  - Every layer syncs on its own: pixels, masks, text, styles, opacity, and position, plus adding, deleting, and reordering layers.
-  - **Live cursors** with names show where each person is pointing, and a coloured badge shows which layer each person is on.
-  - When someone joins, they get the host's open image automatically. Anyone can share a new image with **Share “…”** in the session panel, or just by opening it.
-  - If two people change the same thing at the same moment, everyone ends up with the same result (the later change wins), and nobody's new layers or deletions get lost.
-- **Collaboration polish:**
-  - A **LIVE** indicator in the top bar.
-  - Everyone's avatar shows which editor they're in (🎬 Video, 🖼️ Photo, ✏️ Animate).
-  - The people list updates live.
-  - Collaboration now works from the photo editor too.
-  - Fixed "End session" showing the wrong message for the host.
-- **UI tweaks:** a tidier Animate timeline toolbar (compact add-layer buttons that fit on smaller screens) and cleaner top-bar spacing.
+- **🌍 Collaborate from anywhere, not just the same Wi-Fi.**
+  - Start a session and you get a 16-character join code (like `4X5X-J1WT-6032-DEBB`). Your friend enters it on any internet connection — a different house, a phone hotspot, another country — and you're editing together.
+  - Video and thumbnails both work, along with live cursors, media sharing (files stream directly between your computers), and everything else.
+- **How it connects:**
+  - The two apps find each other through a free public connection service (PeerJS, used by many WebRTC apps), then connect **directly**, computer to computer, over an encrypted connection.
+  - The connection details are themselves **end-to-end encrypted with a secret inside your join code**, so the service can't read them and nobody without the exact code can join. A wrong code is rejected right away.
+- **Same Wi-Fi still works:**
+  - If you're on the same network, the old shorter local code still works (under "On the same Wi-Fi?" in the session panel) and is the fastest option.
+  - If the internet service can't be reached, sessions fall back to local-only and tell you why.
+- Big files are sent in small pieces with flow control, so large videos transfer without running out of memory.
 
-Video collaboration was re-tested end to end, and both copies stayed identical with two people making rapid edits at the same time. Covered: live edits, effects and keyframes, importing media (it's sent to the other person automatically), splits, undo, adding titles at the same moment, and leaving/ending sessions.
+**If joining over the internet fails:** some very strict networks (some school or office Wi-Fi, a few mobile carriers) block direct connections between computers. Try a different connection (e.g. a phone hotspot) for one of you, or use the same-Wi-Fi code.
