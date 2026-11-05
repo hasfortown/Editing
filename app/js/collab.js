@@ -20,6 +20,7 @@
   };
 
   K.status = () => ({ mode: K.mode, peers: peers.size, info });
+  K.myId = () => myId;
   K.peers = () => [...peers.values()];
   K.canFetch = () => K.mode === 'guest';
   K.fetchMedia = async (m, onProgress) => {
@@ -58,8 +59,9 @@
   }
 
   C.on('change', (i) => { if (K.mode !== 'off' && i.source !== 'remote') flush(); });
-  const presence = C.throttle(() => { if (K.mode !== 'off') N.collabSend({ t: 'presence', playhead: C.UI.playhead, selection: [...C.selection] }); }, 150);
-  C.on('time', presence); C.on('select', presence);
+  const presence = C.throttle(() => { if (K.mode !== 'off') N.collabSend({ t: 'presence', playhead: C.UI.playhead, selection: [...C.selection], mode: C.mode || 'video' }); }, 150);
+  C.on('time', presence); C.on('select', presence); C.on('modeChanged', presence); C.on('collab', () => setTimeout(presence, 300));
+  K.where = (m) => ({ photo: '🖼️ Photo editor', anim: '✏️ Animate', video: '🎬 Video editor' })[m || 'video'];
 
   N.onCollab('message', (m) => {
     if (m.t === 'op') {
@@ -76,7 +78,7 @@
       for (const id of newMedia) C.prepareMedia(C.project.media[id]);
       if (d.media) C.emit('media');
     } else if (m.t === 'presence') {
-      peers.set(m.from, Object.assign(peers.get(m.from) || {}, { id: m.from, name: m.name, color: m.color, playhead: m.playhead, selection: m.selection }));
+      peers.set(m.from, Object.assign(peers.get(m.from) || {}, { id: m.from, name: m.name, color: m.color, playhead: m.playhead, selection: m.selection, mode: m.mode }));
       C.emit('peers');
     } else if (m.t === 'join') {
       peers.set(m.id, { id: m.id, name: m.name, color: m.color });
@@ -261,29 +263,31 @@
   }
 
   function openSession() {
-    const { el, close } = C.modal('<div id="cBody"></div>', { onClose: () => { C.off && C.off('collab', h); } });
+    const { el, close } = C.modal('<div id="cBody"></div>', { onClose: () => { C.off && (C.off('collab', h), C.off('peers', h)); } });
     const render = () => {
       const body = el.querySelector('#cBody'); if (!body) return;
       const ps = K.peers();
-      const people = [{ name: (myName() || 'You') + ' (you)', color: myColor || colorFor(myName() || 'You') }, ...ps];
+      const people = [{ name: (myName() || 'You') + ' (you)', color: myColor || colorFor(myName() || 'You'), mode: C.mode }, ...ps];
       body.innerHTML = `<div class="modal-head"><h2>${K.mode === 'host' ? 'Hosting live session' : 'Connected to ' + C.esc(info.hostName)}</h2><button class="icon-btn" data-x>${C.icon('x')}</button></div>
         <div class="modal-body">
           ${K.mode === 'host' ? (() => { const codes = K.codes(); return `<div class="code-hero"><div class="hint">Your join code</div><div class="join-code" id="cCodeBig">${codes[0] ? codes[0].code : '—'}</div><button class="btn" id="cCopy">${C.icon('copy')}<span>Copy code</span></button></div>
             <p class="hint" style="text-align:center;margin:10px 0 0">Friends open <b style="color:var(--text)">Collaborate</b> in Cutroom (or the home screen), enter this code and join you instantly.</p>
             ${codes.length > 1 ? `<details style="margin-top:8px"><summary class="hint" style="cursor:pointer;text-align:center">Code not working? Try another network adapter's code</summary><div style="display:grid;gap:6px;margin-top:8px">${codes.slice(1).map((c) => `<div class="hint" style="text-align:center"><span class="kbd">${c.code}</span> <span>(${C.esc(c.name)})</span></div>`).join('')}</div></details>` : ''}`; })() : `<p class="hint" style="margin-top:0">Edits you make are sent to everyone instantly. Media you import is uploaded to the session automatically.</p>`}
+          <div class="collab-shared"><div><b>Work on anything together</b><span class="hint">Video edits sync live. In the 🖼️ Photo editor you share one image (perfect for thumbnails) — everyone sees each other's cursor and layers update as you work.</span></div>${C.photo && C.photo.doc ? `<button class="btn" id="cSharePhoto">${C.icon('photo')}<span>Share “${C.esc(C.photo.doc.name)}”</span></button>` : ''}</div>
           <div class="section-title" style="margin-top:18px"><span>People (${people.length})</span></div>
-          <div style="display:grid;gap:8px">${people.map((p) => `<div style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color};color:#000;display:grid;place-items:center;font-weight:700">${C.esc((p.name || '?')[0].toUpperCase())}</span><span>${C.esc(p.name)}</span>${p.playhead != null ? `<span class="muted" style="margin-left:auto;font-family:var(--mono);font-size:11.5px">${C.fmtTC(p.playhead, C.fps())}</span>` : ''}</div>`).join('')}</div>
+          <div style="display:grid;gap:8px">${people.map((p) => `<div style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:${p.color};color:#000;display:grid;place-items:center;font-weight:700">${C.esc((p.name || '?')[0].toUpperCase())}</span><span>${C.esc(p.name)}<small class="muted" style="display:block;font-size:11px">${K.where(p.mode)}</small></span>${p.playhead != null && (p.mode || 'video') === 'video' ? `<span class="muted" style="margin-left:auto;font-family:var(--mono);font-size:11.5px">${C.fmtTC(p.playhead, C.fps())}</span>` : ''}</div>`).join('')}</div>
         </div>
         <div class="modal-foot"><button class="btn danger" id="cEnd">${K.mode === 'host' ? 'End session' : 'Leave session'}</button><button class="btn primary" data-x>Keep editing</button></div>`;
       C.fillIcons(body);
       body.querySelectorAll('[data-x]').forEach((b) => (b.onclick = close));
       const cp = body.querySelector('#cCopy');
       if (cp) cp.onclick = () => { navigator.clipboard.writeText(body.querySelector('#cCodeBig').textContent).then(() => C.toast('Join code copied — send it to your friends')); };
-      body.querySelector('#cEnd').onclick = async () => { await K.leave(); close(); C.toast(K.mode === 'host' ? 'Session ended' : 'Left the session', 'info'); };
+      body.querySelector('#cEnd').onclick = async () => { const wasHost = K.mode === 'host'; await K.leave(); close(); C.toast(wasHost ? 'Session ended' : 'Left the session', 'info'); };
+      const sh = body.querySelector('#cSharePhoto'); if (sh) sh.onclick = () => { if (C.photoSync && C.photo.doc) { C.photoSync.flush(true); C.toast(`Sharing “${C.photo.doc.name}” with everyone`, 'ok', 2000); } };
     };
     render();
     const h = () => render();
-    C.on('collab', h);
+    C.on('collab', h); C.on('peers', h);
   }
 
   // top-bar avatars
@@ -291,7 +295,8 @@
     const wrap = C.$('#collabAvatars'); if (!wrap) return;
     const ps = K.peers();
     const me = { name: (myName() || 'You') + ' (you)', color: myColor || '#19d3c5' };
-    wrap.innerHTML = K.mode === 'off' ? '' : [me, ...ps].slice(0, 6).map((p) => `<span data-tip="${C.esc(p.name)}" style="width:24px;height:24px;border-radius:50%;background:${p.color};color:#000;display:inline-grid;place-items:center;font-weight:700;font-size:11px;margin-left:-6px;border:2px solid var(--bg)">${C.esc((p.name || '?')[0].toUpperCase())}</span>`).join('') + `<span class="live-pill" style="margin-left:8px;background:rgba(62,224,143,.15);color:#3ee08f;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px">LIVE${ps.length ? ' · ' + (ps.length + 1) : ''}</span>`;
+    me.mode = C.mode;
+    wrap.innerHTML = K.mode === 'off' ? '' : `<span class="live-pill" data-tip="Live session · ${ps.length + 1} ${ps.length ? 'people' : 'person (waiting for others)'}"><i></i>LIVE · ${ps.length + 1}</span>` + [me, ...ps].slice(0, 6).map((p) => `<span data-tip="${C.esc(p.name)} · ${K.where(p.mode)}" style="width:24px;height:24px;border-radius:50%;background:${p.color};color:#000;display:inline-grid;place-items:center;font-weight:700;font-size:11px;margin-left:-6px;border:2px solid var(--bg)">${C.esc((p.name || '?')[0].toUpperCase())}</span>`).join('');
     const btn = C.$('#btnCollab'); if (btn) btn.classList.toggle('active', K.mode !== 'off');
   });
 

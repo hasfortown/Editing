@@ -17,12 +17,14 @@
     if (m === 'photo') {
       C.engine.pause();
       if (!PU.ready) { PU.init(); PP.init(); }
+      C.photoSync && C.photoSync.init();
       setTimeout(() => { if (P.doc) PU.fit(); PU.redraw(); PP.renderAll(); }, 30);
     } else if (m === 'anim') {
       C.engine.pause(); C.anim.init();
       setTimeout(() => { C.anim._fitted = false; C.anim.fit(); C.anim.changed(true); }, 30);
     } else { C.engine.layout(); C.tl.render(); }
     C.closeMenu();
+    C.emit('modeChanged', m); C.emit('peers');
   };
 
   const PP = (C.photoPanels = {});

@@ -302,7 +302,7 @@
         <label class="atl-fps" data-tip="How many frames before/after onion skin shows">Onion <select class="select compact" data-a="onionN">${[1, 2, 3, 4, 5].map((v) => `<option ${v === A.onionRange ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         <button class="btn ${d.audio ? 'on' : ''}" data-a="sound" data-tip="${d.audio ? C.esc(C.baseName(d.audio.path)) + ' — click to change or remove' : 'Add music or voice — plays in sync and is included in exports'}">${C.icon('music')}<span>${d.audio ? 'Sound ✓' : 'Sound'}</span></button>
         <span style="flex:1"></span>
-        <button class="btn" data-a="addDraw">${C.icon('brush')}<span>Drawing</span></button><button class="btn" data-a="addObj">${C.icon('plus')}<span>Object</span></button><button class="btn" data-a="add3d">${C.icon('cube')}<span>3D</span></button>
+        <button class="btn atl-add" data-a="addDraw" data-tip="New drawing layer">${C.icon('brush')}<b>+</b></button><button class="btn atl-add" data-a="addObj" data-tip="Add text, emoji, shape or image">${C.icon('shapes')}<b>+</b></button><button class="btn atl-add" data-a="add3d" data-tip="Add a 3D layer (mannequin or your own rig)">${C.icon('cube')}<b>+</b></button>
       </div>
       <div class="atl-body"><div class="atl-layers"></div><div class="atl-grid"><div class="atl-ruler"></div><div class="atl-rows"></div><div class="atl-head"></div></div></div>`;
     const bar = tl.querySelector('.atl-bar');

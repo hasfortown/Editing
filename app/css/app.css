@@ -711,7 +711,7 @@ body.mode-photo .photo-ws { display: grid; position: fixed; top: 44px; left: 0; 
 .rc-badge { position: absolute; left: 14px; top: 14px; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,.65); color: #fff; }
 
 .mode-switch button { white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
-body.mode-photo #aspectSelect, body.mode-photo .title-wrap > *, body.mode-photo #btnCollab, body.mode-photo #collabAvatars { display: none; }
+body.mode-photo #aspectSelect, body.mode-photo .title-wrap > * { display: none; }
 body.mode-photo .topbar .sep:first-of-type { display: none; }
 .insp-head .tabs { gap: 0; padding: 4px 6px 0; scrollbar-width: thin; }
 .insp-head .tab { padding: 8px 7px; font-size: 12px; }
@@ -1001,3 +1001,19 @@ body.mode-anim .anim-ws { display: grid; position: fixed; top: 44px; left: 0; ri
 .atl-key.ghost, .atl-diamond.ghost { opacity: .7; outline: 2px solid #fff; pointer-events: none; z-index: 4; }
 .atl-bar .btn { white-space: nowrap; flex: none; }
 .an-props .section-title { justify-content: flex-start; text-transform: none; letter-spacing: 0; }
+
+/* ---------- photo collaboration ---------- */
+.ph-lrow { position: relative; }
+.ph-peer { position: absolute; right: 34px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font: 700 10px var(--font); color: #0b0c10; box-shadow: 0 0 0 2px var(--panel); }
+
+.live-pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; margin-right: 6px; border-radius: 999px; background: rgba(255,61,90,.14); color: #ff6b81; font: 700 10.5px var(--font); letter-spacing: .06em; vertical-align: middle; }
+.live-pill i { width: 7px; height: 7px; border-radius: 50%; background: #ff3d5a; box-shadow: 0 0 0 0 rgba(255,61,90,.6); animation: livePulse 1.6s infinite; }
+@keyframes livePulse { 70% { box-shadow: 0 0 0 7px rgba(255,61,90,0); } 100% { box-shadow: 0 0 0 0 rgba(255,61,90,0); } }
+.collab-shared { display: flex; gap: 12px; align-items: center; margin-top: 16px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--panel-2); }
+.collab-shared > div { display: grid; gap: 3px; flex: 1; }
+.collab-shared .btn { flex: none; }
+.live-pill { white-space: nowrap; flex: none; margin-right: 10px; }
+#collabAvatars { white-space: nowrap; flex: none; }
+.atl-add { padding: 0 8px !important; gap: 2px !important; }
+.atl-add b { font-size: 13px; color: var(--accent); }
+.atl-bar .atl-fps { white-space: nowrap; }

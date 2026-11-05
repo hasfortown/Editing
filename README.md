@@ -9,6 +9,24 @@ A fast, clean multi-track video editor for Windows. It has a modern dark interfa
 3. Follow the setup wizard. It installs only for your user, so no admin rights are needed, and it adds Start Menu and desktop shortcuts.
 4. To uninstall, go to **Settings → Apps → Cutroom → Uninstall**.
 
+## What's new in 1.7
+
+- **🤝 Collaboration on thumbnails and images:**
+  - The **photo editor is now live and shared**, so two (or more) people can work on the same thumbnail, poster, or image at the same time.
+  - Every layer syncs on its own: pixels, masks, text, styles, opacity, and position, plus adding, deleting, and reordering layers.
+  - **Live cursors** with names show where each person is pointing, and a coloured badge shows which layer each person is on.
+  - When someone joins, they get the host's open image automatically. Anyone can share a new image with **Share “…”** in the session panel, or just by opening it.
+  - If two people change the same thing at the same moment, everyone ends up with the same result (the later change wins), and nobody's new layers or deletions get lost.
+- **Collaboration polish:**
+  - A **LIVE** indicator in the top bar.
+  - Everyone's avatar shows which editor they're in (🎬 Video, 🖼️ Photo, ✏️ Animate).
+  - The people list updates live.
+  - Collaboration now works from the photo editor too.
+  - Fixed "End session" showing the wrong message for the host.
+- **UI tweaks:** a tidier Animate timeline toolbar (compact add-layer buttons that fit on smaller screens) and cleaner top-bar spacing.
+
+Video collaboration was re-tested end to end, and both copies stayed identical with two people making rapid edits at the same time. Covered: live edits, effects and keyframes, importing media (it's sent to the other person automatically), splits, undo, adding titles at the same moment, and leaving/ending sessions.
+
 ## What's new in 1.6
 
 - **✏️ Animate, a third app** (home page, or **Animate** at the top), for making 2D animations:

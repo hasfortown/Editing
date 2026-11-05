@@ -93,9 +93,17 @@ function create({ send, userDir }) {
       send('collab:message', out);     // to host renderer
     } else if (msg.t === 'presence') {
       const c = fromId === 'host' ? { name: h.name, color: COLORS[0] } : h.clients.get(fromId);
-      const out = { t: 'presence', from: fromId, name: c ? c.name : 'Guest', color: c ? c.color : '#fff', playhead: msg.playhead, selection: msg.selection };
+      const out = { t: 'presence', from: fromId, name: c ? c.name : 'Guest', color: c ? c.color : '#fff', playhead: msg.playhead, selection: msg.selection, mode: msg.mode };
       broadcast(h, out, fromId);
       if (fromId !== 'host') send('collab:message', out);
+    } else if (['pl', 'pd', 'preq', 'pc'].includes(msg.t)) {
+      // photo-editor collaboration. Layer + structure updates are echoed to everyone (sender included) so all
+      // copies apply them in the same hub order and converge; cursors / requests go to everyone else.
+      const c = fromId === 'host' ? { name: h.name, color: COLORS[0] } : h.clients.get(fromId);
+      const out = Object.assign({}, msg, { from: fromId, name: c ? c.name : 'Guest', color: c ? c.color : '#fff' });
+      const echo = msg.t === 'pl' || msg.t === 'pd';
+      broadcast(h, out, echo ? null : fromId);
+      if (echo || fromId !== 'host') send('collab:message', out);
     } else if (msg.t === 'chat') {
       const c = fromId === 'host' ? { name: h.name } : h.clients.get(fromId);
       const out = { t: 'chat', from: fromId, name: c ? c.name : 'Guest', text: String(msg.text || '').slice(0, 500) };
